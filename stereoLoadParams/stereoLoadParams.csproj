@@ -70,7 +70,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="cxOF.cs" />
-    <Compile Include="VisionApp.cs" />
+    <Compile Include="stereoPoint3D.cs" />
+    <Compile Include="TargetCoordinate.cs" />
+    <Compile Include="VisionApp.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="VisionApp.Designer.cs">
       <DependentUpon>VisionApp.cs</DependentUpon>
     </Compile>
@@ -102,6 +106,11 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="cxOF_image.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

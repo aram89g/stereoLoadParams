@@ -1,13 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Text;
 using System.Windows.Forms;
 using System.IO;
 using System.Diagnostics;
-using System.Threading.Tasks;
 using System.Threading;
 
 //EMGU
@@ -22,34 +18,16 @@ using DirectShowLib;
 //Remote Drone cxOF
 using cxOF;
 
+
 namespace stereoLoadParams
 {
-    static public class TargetCoordinate
-    {
-        static public double X_target = 0;
-        static public double Y_target = 0;
-        static public double Z_target = 0.8;
-
-        //static double getX()
-        //{
-        //    return X_target;
-        //}
-        //static double getY()
-        //{
-        //    return Y_target;
-        //}
-        //static double getZ()
-        //{
-        //    return Z_target;
-        //}
-    }
 
     public partial class VisionApp : Form
     {
-        bool csharpCalib = true; // for debug
-        bool debugMode = false; // for debug
+        static bool imageCalibration; // Calibration flag, do new calibration or load pramaters from old one
+        static bool debugMode = false; // Debug flag
 
-        CxOF rmt = new CxOF();
+        public CxOF rmt = new CxOF(); // CX-OF drone remote
         #region Traget coordinates
         double X_target;
         double Y_target;
@@ -59,13 +37,12 @@ namespace stereoLoadParams
         VideoCapture capLeft;
         VideoCapture capRight;
         Video_Device[] WebCams;
-        TimeSpan diffLeft;
-        TimeSpan diffRight;
         DateTime baseTime = new DateTime();
 
-        String imagesPath = "C:\\Users\\Public\\Pictures_3011\\";
-
+        //String imagesPath = "C:\\Users\\Public\\Pictures_test3\\";
+        Mat cxFrame = new Mat("cxOF_image.jpg");
         #region Frame matrices
+        //Frame matrices
         Mat frameLeft = new Mat();
         Mat frameRight = new Mat();
         Mat frameLeftRectified = new Mat();
@@ -76,10 +53,10 @@ namespace stereoLoadParams
         Mat grayRight = new Mat();
         Mat chessFrameL = new Mat();
         Mat chessFrameR = new Mat();
-        //Mat disparity = new Mat();
         #endregion
 
         #region Calibration variables
+        //Calibration variables
         static int bufferLength = 20; // define how many good images needed
         int bufferSavepoint = 0;
         bool patternLeftFound; // True if chessboard found in image
@@ -98,13 +75,13 @@ namespace stereoLoadParams
         PointF[][] imagePoints2 = new PointF[bufferLength][];
         #endregion
 
-        #region  Chessboard Size
+        #region Chessboard Size
         const int width = 9; //width of chessboard no. squares in width - 1
         const int height = 6; // height of chess board no. squares in heigth - 1
         Size patternSize = new Size(width, height); //size of chess board to be detected
         #endregion
 
-        #region Cameras Paramemters
+        #region Camera Matrices
         Mat newCamMat1 = new Mat(3, 3, DepthType.Cv64F, 1);
         Mat newCamMat2 = new Mat(3, 3, DepthType.Cv64F, 1);
         Mat camMat1 = new Mat(3, 3, DepthType.Cv64F, 1);
@@ -131,8 +108,6 @@ namespace stereoLoadParams
         #region Rectification variables
         Rectangle Rec1 = new Rectangle(); //Rectangle Calibrated in camera 1
         Rectangle Rec2 = new Rectangle(); //Rectangle Caliubrated in camera 2
-        Rectangle Rec3 = new Rectangle(); //Rectangle Caliubrated in camera 2
-        Rectangle Rec4 = new Rectangle(); //Rectangle Caliubrated in camera 2
 
         Mat rmapx1 = new Mat();
         Mat rmapx2 = new Mat();
@@ -140,7 +115,7 @@ namespace stereoLoadParams
         Mat rmapy2 = new Mat();
         #endregion
 
-        #region Rahamim
+        #region Image Processing Variables
         //Determines boundary of brightness while turning grayscale image to binary(black-white) image
         private const int Threshold = 5;
 
@@ -180,32 +155,35 @@ namespace stereoLoadParams
         private static Point point_center_r = new Point(0, 0);
         private static Boolean left_camera = true;
 
-        private static Double T_3d = 0.125; // [m]
-        private static Double f = 0.004; // Focal Length = 4mm for "LOGITECH HD WEBCAM C270"
         private static Double X_3d = 0.0;
         private static Double Y_3d = 0.0;
         private static Double Z_3d = 0.0;
-        private static Double x_pixel_left_camera = 0.0;
-        private static Double x_pixel_right_camera = 0.0;
-        private static Double x_pixels_amount = 640.0;
-        private static Double y_pixels_amount = 480.0;
-        private static Double ox = x_pixels_amount / 2; // width = 1980 => x_pixel_center = 1980/2  assumes pixels start from 0
-        private static Double oy = y_pixels_amount / 2; // height = 1080 => y_pixel_center = 1080/2 assumes pixels start from 0
-        private static Double x_width_length = (2 / (1.732050808)) * f;
-        private static Double y_width_length = x_width_length;
-        private static Double sx = x_width_length / x_pixels_amount;
-        private static Double sy = y_width_length / y_pixels_amount;
-        private static Double x_1 = 0.0;
-        private static Double x_2 = 0.0;
-        private static Double y_1 = 0.0;
+        //private static Double T_3d = 0.125; // [m]
+        //private static Double f = 0.004; // Focal Length = 4mm for "LOGITECH HD WEBCAM C270"
+        //private static Double x_pixel_left_camera = 0.0;
+        //private static Double x_pixel_right_camera = 0.0;
+        //private static Double x_pixels_amount = 640.0;
+        //private static Double y_pixels_amount = 480.0;
+        //private static Double ox = x_pixels_amount / 2; // width = 1980 => x_pixel_center = 1980/2  assumes pixels start from 0
+        //private static Double oy = y_pixels_amount / 2; // height = 1080 => y_pixel_center = 1080/2 assumes pixels start from 0
+        //private static Double x_width_length = (2 / (1.732050808)) * f;
+        //private static Double y_width_length = x_width_length;
+        //private static Double sx = x_width_length / x_pixels_amount;
+        //private static Double sy = y_width_length / y_pixels_amount;
+        //private static Double x_1 = 0.0;
+        //private static Double x_2 = 0.0;
+        //private static Double y_1 = 0.0;
         //private static Double y_2 = 0.0; // not in use
         #endregion
 
         public VisionApp()
         {
             InitializeComponent();
+            label1.Text = "Created by:\nAram Gasparian\nRahamim Worknah";
+            
             baseTime = DateTime.Now;
             #region Find systems cameras with DirectShow.Net dll
+            // Find systems cameras with DirectShow.Net dll
             DsDevice[] _SystemCamereas = DsDevice.GetDevicesOfCat(FilterCategory.VideoInputDevice);
             WebCams = new Video_Device[_SystemCamereas.Length];
             for (int i = 0; i < _SystemCamereas.Length; i++)
@@ -221,73 +199,20 @@ namespace stereoLoadParams
             }
             #endregion
         }
-        // Not relevent - used for debug
-        private void ProcessFrame2(object sender, EventArgs e)
-        {
 
-            #region Frame Aquasition   
-            capLeft.Retrieve(frameLeft, 0);
-            diffLeft = DateTime.Now - baseTime;
-            capRight.Retrieve(frameRight, 0);
-            diffRight = DateTime.Now - baseTime;
-            //CvInvoke.CvtColor(frameLeft, grayLeft, ColorConversion.Bgr2Gray);
-            //CvInvoke.CvtColor(frameRight, grayRight, ColorConversion.Bgr2Gray);
-            #endregion
-
-            leftUnrectified = frameLeft.Clone();
-            rightUnrectified = frameRight.Clone();
-            // Add horizontal lines to unrectified images
-            //for (int j = 0; j < 480 / 20; j++) 
-            //{
-            //    Rectangle line = new Rectangle(0, j * 20, 640, 1);
-            //    CvInvoke.Rectangle(leftUnrectified, line, new MCvScalar(0, 0, 255), 1, LineType.EightConnected, 0);
-            //    CvInvoke.Rectangle(rightUnrectified, line, new MCvScalar(0, 0, 255), 1, LineType.EightConnected, 0);
-            //}
-            if (debugMode == true)
-            {
-                // Check that frames corosspond in time (The number is milliseconds)
-                CvInvoke.PutText(leftUnrectified, diffLeft.Milliseconds.ToString(), new Point(10, 10), FontFace.HersheyPlain, 1.0, new Bgr(0, 0, 255).MCvScalar);
-                CvInvoke.PutText(rightUnrectified, diffRight.Milliseconds.ToString(), new Point(10, 10), FontFace.HersheyPlain, 1.0, new Bgr(0, 0, 255).MCvScalar);
-            }
-            CvInvoke.Imshow("Unrectified Left", leftUnrectified);
-            CvInvoke.Imshow("Unrectified Right", rightUnrectified);
-
-            // Apply transformation to rectify images
-            CvInvoke.Remap(frameLeft, frameLeftRectified, rmapx1, rmapy1, Inter.Linear);
-            CvInvoke.Remap(frameRight, frameRightRectified, rmapx2, rmapy2, Inter.Linear);
-
-
-            // Add horizontal lines to rectified images
-            //for (int j = 0; j < 480 / 20; j++)
-            //{
-            //    Rectangle line = new Rectangle(0, j * 20, 640, 1);
-            //    CvInvoke.Rectangle(frameLeftRectified,  line, new MCvScalar(0, 255, 0), 1, LineType.EightConnected, 0);
-            //    CvInvoke.Rectangle(frameRightRectified, line, new MCvScalar(0, 255, 0), 1, LineType.EightConnected, 0);
-            //}
-
-            CvInvoke.Imshow("Rectified Left", frameLeftRectified);
-            CvInvoke.Imshow("Rectified Right", frameRightRectified);
-
-
-
-            CvInvoke.WaitKey(0);
-
-        }
-   
         private void Form1_Load(object sender, EventArgs e)
         {
 
         }
         // This code runs when you press the Start button
-        public void startButton_Click(object sender, EventArgs e)
+        public void StartButton_Click(object sender, EventArgs e)
         {
             if (capLeft == null) capLeft = new VideoCapture(Camera_Selection_Left.SelectedIndex);
             if (capRight == null) capRight = new VideoCapture(Camera_Selection_Right.SelectedIndex);
-            if (capLeft.IsOpened && capRight.IsOpened)
+            if (capLeft.IsOpened && capRight.IsOpened) // both cameras working
             {
                 string str1 = "Press ESCAPE key in any image window to close the program.";
-                string str2 = "Press other key in any image window to move to next frame.";
-                MessageBox.Show(str1 + "\n" + str2);
+                MessageBox.Show(str1);
             }
 
             Calibration();
@@ -296,36 +221,35 @@ namespace stereoLoadParams
             backgroundFrame_r = capRight.QueryFrame();
             Mat backgroundLeftRemap = new Mat();
             Mat backgroundRightRemap = new Mat();
-            //CvInvoke.Undistort(backgroundFrame_l, backgroundLeftCrop, camMat1, dist1);
-            //CvInvoke.Undistort(backgroundFrame_r, backgroundRightCrop, camMat2, dist2);
 
-            // Apply transformation to rectify images
+            // Apply transformation to rectify background images
             CvInvoke.Remap(backgroundFrame_l, backgroundLeftRemap, rmapx1, rmapy1, Inter.Linear);
             CvInvoke.Remap(backgroundFrame_r, backgroundRightRemap, rmapx2, rmapy2, Inter.Linear);
             Mat backgroundLeftCrop = new Mat(backgroundLeftRemap, Rec1);
             Mat backgroundRightCrop = new Mat(backgroundRightRemap, Rec2);            
-            //Mat backgroundLeftCrop = new Mat(backgroundFrame_l, RecCrop);
-            //Mat backgroundRightCrop = new Mat(backgroundFrame_r, RecCrop);
             CvInvoke.Imshow(BackgroundFrameWindowName_l, backgroundLeftCrop);
             CvInvoke.Imshow(BackgroundFrameWindowName_r, backgroundRightCrop);
-            //CvInvoke.Imshow(BackgroundFrameWindowName_l, backgroundFrame_l);
-            //CvInvoke.Imshow(BackgroundFrameWindowName_r, backgroundFrame_r);
 
+            // Connect to drone and takeoff from the ground
             rmt.SendHandShake();
+            rmt.Reset();
+            Thread cxThread = new Thread(new ThreadStart(rmt.ThreadProc)); // Create thread to keep session alive with drone
+            cxThread.Start();
+            rmt.Send();
+            CvInvoke.Imshow("Press Here", cxFrame);
+            CvInvoke.WaitKey(5000);
             rmt.Takeoff();
-            Thread.Sleep(5000);
-            TimerCallback tmCallback = rmt.TimerDelegate;
-            System.Threading.Timer timer = new System.Threading.Timer(tmCallback, null, 1000, 100);
+            CvInvoke.WaitKey(5000);
+
 
             //Handling video frames(image processing and contour detection)      
-            VideoProcessingLoop(capLeft, backgroundLeftCrop, capRight, backgroundRightCrop, rmapx1, rmapy1, rmapx2, rmapy2, Rec1, Rec2 );
-            //capLeft.ImageGrabbed += ProcessFrame;
-            //capLeft.Start();
+            VideoProcessingLoop(capLeft, backgroundLeftCrop, capRight, backgroundRightCrop, rmapx1, rmapy1, rmapx2, rmapy2, Rec1, Rec2);        
         }
 
         private void Calibration()
         {
-            if (csharpCalib != true)
+            String imagesPath = calibrationImagesPath.Text;
+            if (imageCalibration != true)
             {
                 FileStorage fs = new FileStorage("stereo.yml", FileStorage.Mode.Read);
                 fs["camMat1"].ReadMat(camMat1);
@@ -335,12 +259,12 @@ namespace stereoLoadParams
                 //fs["R"].ReadMat(R);
                 //fs["T"].ReadMat(T);
             }
-            if (csharpCalib == true)
+            if (imageCalibration == true)
             {
                 for (int i = 0; i < bufferLength * 2; i++)
                 {
-                    chessFrameL = CvInvoke.Imread(imagesPath + "camera1\\image_" + i.ToString() + ".jpg");
-                    chessFrameR = CvInvoke.Imread(imagesPath + "camera2\\image_" + i.ToString() + ".jpg");
+                    chessFrameL = CvInvoke.Imread(imagesPath + "\\camera1\\image_" + i.ToString() + ".jpg");
+                    chessFrameR = CvInvoke.Imread(imagesPath + "\\camera2\\image_" + i.ToString() + ".jpg");
 
                     patternLeftFound = CvInvoke.FindChessboardCorners(chessFrameL, patternSize, cornersVecLeft, CalibCbType.NormalizeImage | CalibCbType.AdaptiveThresh);
                     patternRightFound = CvInvoke.FindChessboardCorners(chessFrameR, patternSize, cornersVecRight, CalibCbType.NormalizeImage | CalibCbType.AdaptiveThresh);
@@ -352,7 +276,6 @@ namespace stereoLoadParams
                         //CvInvoke.CornerSubPix(grayLeft, cornersVecLeft, new Size(11, 11), new Size(-1, -1), new MCvTermCriteria(30, 0.1));
                         //CvInvoke.CornerSubPix(grayRight, cornersVecRight, new Size(11, 11), new Size(-1, -1), new MCvTermCriteria(30, 0.1));
 
-                        //draw the results
                         CvInvoke.DrawChessboardCorners(chessFrameL, patternSize, cornersVecLeft, patternLeftFound);
                         CvInvoke.DrawChessboardCorners(chessFrameR, patternSize, cornersVecRight, patternRightFound);
 
@@ -385,39 +308,39 @@ namespace stereoLoadParams
                 
                 CvInvoke.CalibrateCamera(cornersObjectPoints, imagePoints1, chessFrameL.Size, camMat1, dist1, CalibType.Default, new MCvTermCriteria(100, 1e-5), out rvecs, out tvecs);
                 CvInvoke.CalibrateCamera(cornersObjectPoints, imagePoints2, chessFrameL.Size, camMat2, dist2, CalibType.Default, new MCvTermCriteria(100, 1e-5), out rvecs, out tvecs);
+                
                 CvInvoke.StereoCalibrate(cornersObjectPoints, imagePoints1, imagePoints2, camMat1, dist1, camMat2, dist2, chessFrameL.Size,
                                                                   R, T, essential, fundamental, CalibType.FixAspectRatio | CalibType.ZeroTangentDist| CalibType.SameFocalLength| CalibType.RationalModel| CalibType.UseIntrinsicGuess| CalibType.FixK3|CalibType.FixK4|CalibType.FixK5, new MCvTermCriteria(100, 1e-5));
 
                 CvInvoke.StereoRectify(camMat1, dist1, camMat2, dist2, chessFrameL.Size, R, T, R1, R2, P1, P2, Q, StereoRectifyType.CalibZeroDisparity, 0,
                              chessFrameL.Size, ref Rec1, ref Rec2);
 
-                newCamMat1 = CvInvoke.GetOptimalNewCameraMatrix(camMat1, dist1, chessFrameL.Size, 1, chessFrameL.Size, ref Rec3);
-                newCamMat2 = CvInvoke.GetOptimalNewCameraMatrix(camMat2, dist2, chessFrameL.Size, 1, chessFrameL.Size, ref Rec4);
-
-                CvInvoke.InitUndistortRectifyMap(camMat1, dist1, R1, P1, chessFrameL.Size, DepthType.Cv32F, rmapx1, rmapy1);
-                CvInvoke.InitUndistortRectifyMap(camMat2, dist2, R2, P2, chessFrameL.Size, DepthType.Cv32F, rmapx2, rmapy2);
-
                 ////This will Show us the usable area from each camera
-                MessageBox.Show("Left: " + Rec1.ToString() + " \nRight: " + Rec2.ToString());
+                //MessageBox.Show("Left: " + Rec1.ToString() + " \nRight: " + Rec2.ToString());
             }
+            // Create transformation maps 
+            CvInvoke.InitUndistortRectifyMap(camMat1, dist1, R1, P1, chessFrameL.Size, DepthType.Cv32F, rmapx1, rmapy1);
+            CvInvoke.InitUndistortRectifyMap(camMat2, dist2, R2, P2, chessFrameL.Size, DepthType.Cv32F, rmapx2, rmapy2);
             MessageBox.Show("Calibration has ended");
         }
         public void VideoProcessingLoop(VideoCapture capture_l, Mat backgroundFrame_l, VideoCapture capture_r, Mat backgroundFrame_r, Mat rmapx1, Mat rmapy1, Mat rmapx2, Mat rmapy2, Rectangle Rec1, Rectangle Rec2)
         {
-            var stopwatch = new Stopwatch();// Used for measuring video processing performance
-            var stopwatch_3d_calculate = new Stopwatch();
+            var stopwatch = new Stopwatch();// Used to measure video processing performance
+            var stopwatch_3d_calculate = new Stopwatch();// Used to measure 3D calculation performance
 
             int frameNumber = 1;
+            StereoPoint3D point3D = new StereoPoint3D();
             while (true)// Loop video
             {
-                rawFrame_l = capture_l.QueryFrame();// Getting next frame(null is returned if no further frame exists)
-                rawFrame_r = capture_r.QueryFrame();// Getting next frame(null is returned if no further frame exists)
+                // Getting next frame(null is returned if no further frame exists)
+                rawFrame_l = capture_l.QueryFrame();
+                rawFrame_r = capture_r.QueryFrame();
 
+                // Rectify frames using rmap and crop according to roi (from calibration)
                 CvInvoke.Remap(rawFrame_l, rawFrame_l, rmapx1, rmapy1, Inter.Linear);
                 CvInvoke.Remap(rawFrame_r, rawFrame_r, rmapx2, rmapy2, Inter.Linear);
                 Mat cropLeft = new Mat(rawFrame_l, Rec1);
-                Mat cropRight = new Mat(rawFrame_r, Rec2);
-
+                Mat cropRight = new Mat(rawFrame_r, Rec2);            
                 rawFrame_l = cropLeft;
                 rawFrame_r = cropRight;
 
@@ -425,40 +348,42 @@ namespace stereoLoadParams
                 {
                     frameNumber++;
 
-                    stopwatch.Restart();
+                    // Process frame image to find drone location in the frame
+                    stopwatch.Restart();// Frame processing calculate - Start
                     ProcessFrame(backgroundFrame_l, backgroundFrame_r, Threshold, ErodeIterations, DilateIterations);
-                    stopwatch.Stop();
+                    stopwatch.Stop();// Frame processing calculate - End
 
-                    //3d calculate - start
+                    // Calculate drone 3D coordinate
+                    stopwatch_3d_calculate.Restart(); // 3D calculate - Start
+                    point3D.CalculateCoordinate3D(point_center_l.X, point_center_r.X, point_center_r.Y);
+                    Z_3d = point3D.GetZ3D();
+                    X_3d = point3D.GetX3D();
+                    Y_3d = point3D.GetY3D();
+                    stopwatch_3d_calculate.Stop(); // 3D calculate - End
 
-                    stopwatch_3d_calculate.Restart();
-
-                    x_pixel_left_camera = point_center_r.X;
-                    x_pixel_right_camera = point_center_l.X;
-                    x_1 = (x_pixel_left_camera - ox) * sx;
-                    x_2 = (x_pixel_right_camera - ox) * sx;
-                    y_1 = (point_center_r.Y - oy) * sy;
-                    Z_3d = (T_3d * f) / (x_1 - x_2);
-                    X_3d = x_1 * (Z_3d / f);
-                    Y_3d = y_1 * (Z_3d / f);
-
-                    stopwatch_3d_calculate.Stop();
-
-                    //3d calculate - end
+                    // Check drone position accodring to target and update drone command
                     rmt.InstructionCalculate(X_3d, Y_3d, Z_3d);
+
+                    // Write data to Frame
                     WriteFrameInfo(stopwatch.ElapsedMilliseconds, stopwatch_3d_calculate.ElapsedMilliseconds, frameNumber);
+
+                    // Show all frame processing stages
                     ShowWindowsWithImageProcessingStages();
+                    
 
-                    int key = CvInvoke.WaitKey(0);// Wait indefinitely until key is pressed
-
-                    //Close program if Esc key was pressed(any other key moves to next frame)
+                    int key = CvInvoke.WaitKey(10);// Wait 10msec between frames to not overload video stream
+                    // Close program if Esc key was pressed
                     if (key == 27)
+                    {
+                        rmt.Land();
                         Environment.Exit(0);
+                    }
                 }
                 else
                 {
-                    capture_l.SetCaptureProperty(CapProp.PosFrames, 0);// Move to first frame
-                    capture_r.SetCaptureProperty(CapProp.PosFrames, 0);// Move to first frame
+                    // Move to first frame
+                    capture_l.SetCaptureProperty(CapProp.PosFrames, 0);
+                    capture_r.SetCaptureProperty(CapProp.PosFrames, 0);
                     frameNumber = 0;
                 }
             }
@@ -490,13 +415,16 @@ namespace stereoLoadParams
             left_camera = false;
             DetectObject(denoisedDiffFrame_r, finalFrame_r);
         }
-        private static void ShowWindowsWithImageProcessingStages()
+        private static void ShowWindowsWithImageProcessingStages()        
         {
-            CvInvoke.Imshow(RawFrameWindowName_l, rawFrame_l);
-            CvInvoke.Imshow(RawFrameWindowName_r, rawFrame_r);
-            CvInvoke.Imshow(GrayscaleDiffFrameWindowName, grayscaleDiffFrame_l);
-            CvInvoke.Imshow(BinaryDiffFrameWindowName, binaryDiffFrame_l);
-            CvInvoke.Imshow(DenoisedDiffFrameWindowName, denoisedDiffFrame_l);
+            if (debugMode)
+            {
+                CvInvoke.Imshow(RawFrameWindowName_l, rawFrame_l);
+                CvInvoke.Imshow(RawFrameWindowName_r, rawFrame_r);
+                CvInvoke.Imshow(GrayscaleDiffFrameWindowName, grayscaleDiffFrame_l);
+                CvInvoke.Imshow(BinaryDiffFrameWindowName, binaryDiffFrame_l);
+                CvInvoke.Imshow(DenoisedDiffFrameWindowName, denoisedDiffFrame_l);
+            }
             CvInvoke.Imshow(FinalFrameWindowName_l, finalFrame_l);
             CvInvoke.Imshow(FinalFrameWindowName_r, finalFrame_r);
         }
@@ -531,7 +459,6 @@ namespace stereoLoadParams
                             chosen = i;
                         }
                     }
-
                     //Draw on a frame
                     MarkDetectedObject(displayFrame, contours[chosen], maxArea);
                 }
@@ -576,14 +503,50 @@ namespace stereoLoadParams
                 $"Y_3d : {Y_3d} [meter]",
                 $"Z_3d : {Z_3d} [meter]"
         };
-            finalFrame_l.Save("C:\\Users\\Public\\Pictures_3011\\Left_" + frameNumber + ".jpg");
-            finalFrame_r.Save("C:\\Users\\Public\\Pictures_3011\\Right_" + frameNumber + ".jpg");
+
+            // Save frames to PC
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            Directory.CreateDirectory(desktop + "\\savedFrames");
+            //finalFrame_l.Save(desktop + "\\savedFrames\\Left_" + frameNumber + ".jpg");
+            //finalFrame_r.Save(desktop + "\\savedFrames\\Right_" + frameNumber + ".jpg");
             WriteMultilineText(finalFrame_l, info, new Point(5, 10));
             WriteMultilineText(finalFrame_r, info, new Point(5, 10));
-            finalFrame_l.Save("C:\\Users\\Public\\Pictures_3011\\Left_withData" + frameNumber + ".jpg");
-            finalFrame_r.Save("C:\\Users\\Public\\Pictures_3011\\Right_withData" + frameNumber + ".jpg");
-
-
+            //finalFrame_l.Save(desktop + "\\savedFrames\\Left_withData" + frameNumber + ".jpg");
+            //finalFrame_r.Save(desktop + "\\savedFrames\\Right_withData" + frameNumber + ".jpg");
         }
+
+        private void newCalib_CheckedChanged(object sender, EventArgs e)
+        {
+            if (newCalib.Checked)
+            {
+                imageCalibration = newCalib.Checked;
+                loadCalib.Enabled = false;
+            }
+            else
+            {
+                loadCalib.Enabled = true;
+            }
+        }
+        private void loadCalib_CheckedChanged(object sender, EventArgs e)
+        {
+            if (loadCalib.Checked)
+            {
+                imageCalibration = !(newCalib.Checked);
+                newCalib.Enabled = false;
+            }
+            else
+            {
+                newCalib.Enabled = true;
+            }
+        }
+        private void browseBtn_Click(object sender, EventArgs e)
+        {
+            if (folderBrowserDialog1.ShowDialog() == DialogResult.OK && (loadCalib.Checked || newCalib.Checked))
+            {
+                calibrationImagesPath.Text = folderBrowserDialog1.SelectedPath;
+            }
+        }
+
+
     }
 }
