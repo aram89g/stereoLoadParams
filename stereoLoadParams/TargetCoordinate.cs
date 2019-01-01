@@ -8,7 +8,7 @@ namespace cxOF
     {
         static public double X_target = 0;
         static public double Y_target = 0;
-        static public double Z_target = 1;
+        static public double Z_target = 1.5;
 
         static double GetX()
         {

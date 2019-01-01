@@ -19,7 +19,7 @@ namespace cxOF
         private int right_left_mov = 128;
         private int forward_back = 128;
         private int rotate_left_right = 128;
-        private int up_down = 120; //Change it to set the drone altitude
+        private int up_down = 110; //Change it to set the drone altitude
         private int und1 = 0;   //undefined bytes
         private int und2 = 0;   //undefined bytes      
         private int crc = 0;    //crc calculated from all bytes xor product
@@ -27,7 +27,8 @@ namespace cxOF
 
         static int MIN = 0;
         static int MAX = 255;
-        static int step = 15;
+        static int step = 20;
+        static double delta = 0.15;
         private byte[] message;
 
         public CxOF()
@@ -83,7 +84,7 @@ namespace cxOF
             mode = 0;
             Console.WriteLine("--------------- Calibration--------------");
         }
-        
+
         /*------------------------------------------------------------------
         * Send the command to the drone
         -------------------------------------------------------------------*/
@@ -145,7 +146,7 @@ namespace cxOF
         {
             right_left_mov = 128;
             rotate_left_right = 128;
-            up_down = 120;
+            up_down = 128;
             forward_back = 128;
             mode = 0;
             Console.WriteLine("Stop");
@@ -178,157 +179,172 @@ namespace cxOF
         -------------------------------------------------------------------*/
         public void InstructionCalculate(double X, double Y, double Z)
         {
-            //while (true)
-            //{
-                int key = CvInvoke.WaitKey(50);
-                if (key == -1)
+
+            int key = CvInvoke.WaitKey(50);            
+            if (key == -1)
+            {
+                // Horizontal axis
+                if ((X < (TargetCoordinate.X_target + delta)) && (X > (TargetCoordinate.X_target - delta)))
                 {
-                    // Horizontal axis
-                    if (X < TargetCoordinate.X_target)
-                    {
-                        right_left_mov = ValidStep(138, 0, 0, 255);
-                        Console.WriteLine("goes right");
-                    }
-                    else
-                    {
-                        right_left_mov = ValidStep(118, 0, 0, 255);
-                        Console.WriteLine("goes left");
-                    }
-                    // Vertical axis
-                    if (Y < TargetCoordinate.Y_target)
-                    {
-                        up_down = ValidStep(118, 0, 0, 255);
-                        Console.WriteLine("goes down");
-                    }
-                    else
-                    {
-                        up_down = ValidStep(138, 0, 0, 255);
-                        Console.WriteLine("goes up");
-                    }
-                    // Depth axis
-                    if (Z < TargetCoordinate.Z_target)
-                    {
-                        forward_back = ValidStep(138, 0, 0, 255);
-                        Console.WriteLine("goes forward");
-                    }
-                    else
-                    {
-                        forward_back = ValidStep(118, 0, 0, 255);
-                        Console.WriteLine("goes backwards");
-                    }
+                    right_left_mov = 128;
+                    mode = 0;
+                }
+                if (X < TargetCoordinate.X_target)
+                {
+                    right_left_mov = ValidStep(128 + step, 0, 0, 255);
+                    Console.WriteLine("goes right");
                 }
                 else
                 {
-
-                    Console.WriteLine("kEY = {0}", key);
-                    if (key == 54) // 6->
-                    {
-                        right_left_mov = ValidStep(right_left_mov, step, MIN, MAX);
-                        Console.WriteLine("Throttle {0}", right_left_mov);
-                    }
-
-                    if (key == 52) // 4<-
-                    {
-                        right_left_mov = ValidStep(right_left_mov, -step, 0, 255); //65-191
-                        Console.WriteLine("Throttle {0}", right_left_mov);
-                    }
-
-                    if (key == 'A' || key == 'a') // a|A
-                    {
-                        rotate_left_right = ValidStep(rotate_left_right, -step, 0, 255);
-                        Console.WriteLine("Rudder {0}", rotate_left_right);
-                    }
-
-                    if (key == 'D' || key == 'd') // d|D
-                    {
-                        rotate_left_right = ValidStep(rotate_left_right, step, 0, 255);
-                        Console.WriteLine("Rudder {0}", rotate_left_right);
-                    }
-
-                    if (key == 56) // 8
-                    {
-                        forward_back = ValidStep(forward_back, step, 0, 255);
-                        Console.WriteLine("forward_back {0}", forward_back);
-                    }
-
-                    if (key == 50) // 2
-                    {
-                        forward_back = ValidStep(forward_back, -step, 0, 255);
-                        Console.WriteLine("forward_back {0}", forward_back);
-                    }
-
-                    if (key == 'S' || key == 's') // s|S
-                    {
-                        up_down = ValidStep(up_down, -step, 0, 255);
-                        Console.WriteLine("up_down {0}", up_down);
-                    }
-
-                    if (key == 'W' || key == 'w') // w|W
-                    {
-                        up_down = ValidStep(up_down, step, 0, 255);
-                        Console.WriteLine("up_down {0}", up_down);
-                    }
-
-                    if (key == 'T' || key == 't') // t|T
-                    {
-                        mode = 1;
-                        Console.WriteLine("Mode {0} //takeoff", mode);
-                    }
-
-                    if (key == 'E' || key == 'e') // E|e
-                    {
-                        mode = 4;
-                        Console.WriteLine("Mode {0} //Emergency", mode);
-                    }
-
-                    if (key == 'L' || key == 'l') // l|L
-                    {
-                        mode = 2;
-                        Console.WriteLine("Mode {0} //land", mode);
-                    }
-                    //~~~~~~~TEST KEYS~~~~~~~~~~#                        
-                    if (key == 'Z' || key == 'z') // z|Z
-                    {
-                        Reset();
-                        Console.WriteLine("und1 {0} ", und1);
-                    }
-
-                    if (key == 'X' || key == 'x') // x|X
-                    {
-                        und1 = 2;
-                        Console.WriteLine("und1 {0}", und1);
-                    }
-
-                    if (key == 'N' || key == 'n') // n|N
-                    {
-                        //square_filght();
-                        Console.WriteLine("und2 {0} ", und2);
-                    }
-
-                    if (key == 'M' || key == 'm') // m|M
-                    {
-                        und2 = 2;
-                        Console.WriteLine("und2 {0}", und2);
-                    }
-
-                    //~~~~~~~RESET AND ESC KEYS~~~~~~~~~~    
-                    if (key == 32) // space
-                    {
-                        right_left_mov = 128;
-                        rotate_left_right = 128;
-                        up_down = 120;
-                        forward_back = 128;
-                        mode = 0;
-                        Console.WriteLine("Reset commands");
-                    }
-
-                    if (key == 27) // Esc
-                    {
-                        Console.WriteLine("Exiting..");
-                        mode = 2;
-                        System.Environment.Exit(0);
-                    }
+                    right_left_mov = ValidStep(128 - step, 0, 0, 255);
+                    Console.WriteLine("goes left");
                 }
+                // Vertical axis
+                if ((Y < (TargetCoordinate.Y_target + delta)) && (Y > (TargetCoordinate.Y_target - delta)))
+                {
+                    up_down = 128;
+                    mode = 0;
+                }
+                if (Y < TargetCoordinate.Y_target)
+                {
+                    up_down = ValidStep(128 - step, 0, 0, 255);
+                    Console.WriteLine("goes down");
+                }
+                else
+                {
+                    up_down = ValidStep(128 + step, 0, 0, 255);
+                    Console.WriteLine("goes up");
+                }
+                //Depth axis
+                if ((Z < (TargetCoordinate.Z_target + delta)) && (Z > (TargetCoordinate.Z_target - delta)))
+                {
+                    forward_back = 128;
+                    mode = 0;
+                }
+                if (Z < TargetCoordinate.Z_target)
+                {
+                    forward_back = ValidStep(128 + step, 0, 0, 255);
+                    Console.WriteLine("goes forward");
+                }
+                else
+                {
+                    forward_back = ValidStep(128 - step, 0, 0, 255);
+                    Console.WriteLine("goes backwards");
+                }
+            }
+            else
+            {
+
+                Console.WriteLine("kEY = {0}", key);
+                if (key == 54) // 6->
+                {
+                    right_left_mov = ValidStep(right_left_mov, step, MIN, MAX);
+                    Console.WriteLine("Throttle {0}", right_left_mov);
+                }
+
+                if (key == 52) // 4<-
+                {
+                    right_left_mov = ValidStep(right_left_mov, -step, 0, 255); //65-191
+                    Console.WriteLine("Throttle {0}", right_left_mov);
+                }
+
+                if (key == 'A' || key == 'a') // a|A
+                {
+                    rotate_left_right = ValidStep(rotate_left_right, -step, 0, 255);
+                    Console.WriteLine("Rudder {0}", rotate_left_right);
+                }
+
+                if (key == 'D' || key == 'd') // d|D
+                {
+                    rotate_left_right = ValidStep(rotate_left_right, step, 0, 255);
+                    Console.WriteLine("Rudder {0}", rotate_left_right);
+                }
+
+                if (key == 56) // 8
+                {
+                    forward_back = ValidStep(forward_back, step, 0, 255);
+                    Console.WriteLine("forward_back {0}", forward_back);
+                }
+
+                if (key == 50) // 2
+                {
+                    forward_back = ValidStep(forward_back, -step, 0, 255);
+                    Console.WriteLine("forward_back {0}", forward_back);
+                }
+
+                if (key == 'S' || key == 's') // s|S
+                {
+                    up_down = ValidStep(up_down, -step, 0, 255);
+                    Console.WriteLine("up_down {0}", up_down);
+                }
+
+                if (key == 'W' || key == 'w') // w|W
+                {
+                    up_down = ValidStep(up_down, step, 0, 255);
+                    Console.WriteLine("up_down {0}", up_down);
+                }
+
+                if (key == 'T' || key == 't') // t|T
+                {
+                    mode = 1;
+                    Console.WriteLine("Mode {0} //takeoff", mode);
+                }
+
+                if (key == 'E' || key == 'e') // E|e
+                {
+                    mode = 4;
+                    Console.WriteLine("Mode {0} //Emergency", mode);
+                }
+
+                if (key == 'L' || key == 'l') // l|L
+                {
+                    mode = 2;
+                    Console.WriteLine("Mode {0} //land", mode);
+                }
+                //~~~~~~~TEST KEYS~~~~~~~~~~#                        
+                if (key == 'Z' || key == 'z') // z|Z
+                {
+                    Reset();
+                    Console.WriteLine("und1 {0} ", und1);
+                }
+
+                if (key == 'X' || key == 'x') // x|X
+                {
+                    und1 = 2;
+                    Console.WriteLine("und1 {0}", und1);
+                }
+
+                if (key == 'N' || key == 'n') // n|N
+                {
+                    //square_filght();
+                    Console.WriteLine("und2 {0} ", und2);
+                }
+
+                if (key == 'M' || key == 'm') // m|M
+                {
+                    und2 = 2;
+                    Console.WriteLine("und2 {0}", und2);
+                }
+
+                //~~~~~~~RESET AND ESC KEYS~~~~~~~~~~    
+                if (key == 32) // space
+                {
+                    right_left_mov = 128;
+                    rotate_left_right = 128;
+                    up_down = 120;
+                    forward_back = 128;
+                    mode = 0;
+                    Console.WriteLine("Reset commands");
+                }
+
+                if (key == 27) // Esc
+                {
+                    Console.WriteLine("Exiting..");
+                    mode = 2;
+                    CvInvoke.WaitKey(5000);
+                    Environment.Exit(0);
+                }
+            }
             //}
 
         }

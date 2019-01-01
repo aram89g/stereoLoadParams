@@ -33,10 +33,11 @@
             this.StartButton = new System.Windows.Forms.Button();
             this.newCalib = new System.Windows.Forms.CheckBox();
             this.folderBrowserDialog1 = new System.Windows.Forms.FolderBrowserDialog();
-            this.calibrationImagesPath = new System.Windows.Forms.TextBox();
+            this.calibrationPath = new System.Windows.Forms.TextBox();
             this.browseBtn = new System.Windows.Forms.Button();
             this.loadCalib = new System.Windows.Forms.CheckBox();
             this.label1 = new System.Windows.Forms.Label();
+            this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
             this.SuspendLayout();
             // 
             // Camera_Selection_Left
@@ -58,7 +59,7 @@
             // StartButton
             // 
             this.StartButton.FlatAppearance.BorderSize = 4;
-            this.StartButton.Location = new System.Drawing.Point(373, 67);
+            this.StartButton.Location = new System.Drawing.Point(444, 46);
             this.StartButton.Name = "StartButton";
             this.StartButton.Size = new System.Drawing.Size(92, 65);
             this.StartButton.TabIndex = 2;
@@ -77,12 +78,12 @@
             this.newCalib.UseVisualStyleBackColor = true;
             this.newCalib.CheckedChanged += new System.EventHandler(this.newCalib_CheckedChanged);
             // 
-            // calibrationImagesPath
+            // calibrationPath
             // 
-            this.calibrationImagesPath.Location = new System.Drawing.Point(12, 174);
-            this.calibrationImagesPath.Name = "calibrationImagesPath";
-            this.calibrationImagesPath.Size = new System.Drawing.Size(272, 20);
-            this.calibrationImagesPath.TabIndex = 4;
+            this.calibrationPath.Location = new System.Drawing.Point(12, 174);
+            this.calibrationPath.Name = "calibrationPath";
+            this.calibrationPath.Size = new System.Drawing.Size(272, 20);
+            this.calibrationPath.TabIndex = 4;
             // 
             // browseBtn
             // 
@@ -108,11 +109,15 @@
             // label1
             // 
             this.label1.AutoSize = true;
-            this.label1.Location = new System.Drawing.Point(408, 209);
+            this.label1.Location = new System.Drawing.Point(441, 205);
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(35, 13);
             this.label1.TabIndex = 7;
             this.label1.Text = "label1";
+            // 
+            // openFileDialog1
+            // 
+            this.openFileDialog1.FileName = "openFileDialog1";
             // 
             // VisionApp
             // 
@@ -120,11 +125,11 @@
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.AutoSize = true;
             this.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
-            this.ClientSize = new System.Drawing.Size(508, 252);
+            this.ClientSize = new System.Drawing.Size(568, 266);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.loadCalib);
             this.Controls.Add(this.browseBtn);
-            this.Controls.Add(this.calibrationImagesPath);
+            this.Controls.Add(this.calibrationPath);
             this.Controls.Add(this.newCalib);
             this.Controls.Add(this.StartButton);
             this.Controls.Add(this.Camera_Selection_Right);
@@ -144,10 +149,11 @@
         private System.Windows.Forms.Button StartButton;
         private System.Windows.Forms.CheckBox newCalib;
         private System.Windows.Forms.FolderBrowserDialog folderBrowserDialog1;
-        private System.Windows.Forms.TextBox calibrationImagesPath;
+        private System.Windows.Forms.TextBox calibrationPath;
         private System.Windows.Forms.Button browseBtn;
         private System.Windows.Forms.CheckBox loadCalib;
         private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.OpenFileDialog openFileDialog1;
     }
 }
 

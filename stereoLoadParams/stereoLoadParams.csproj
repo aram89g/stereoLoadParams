@@ -69,6 +69,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Calibration.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="cxOF.cs" />
     <Compile Include="stereoPoint3D.cs" />
     <Compile Include="TargetCoordinate.cs" />

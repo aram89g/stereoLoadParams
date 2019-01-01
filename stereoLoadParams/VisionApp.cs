@@ -1,23 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Windows.Forms;
-using System.IO;
-using System.Diagnostics;
-using System.Threading;
-
-//EMGU
-using Emgu.CV;
-using Emgu.CV.Structure;
-using Emgu.CV.CvEnum;
-using Emgu.CV.Util;
-
+﻿//Remote Drone cxOF
+using cxOF;
 //DiresctShow
 using DirectShowLib;
-
-//Remote Drone cxOF
-using cxOF;
-
+//EMGU
+using Emgu.CV;
+using Emgu.CV.CvEnum;
+using Emgu.CV.Structure;
+using Emgu.CV.Util;
+using System;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Threading;
+using System.Windows.Forms;
 
 namespace stereoLoadParams
 {
@@ -207,14 +202,15 @@ namespace stereoLoadParams
         // This code runs when you press the Start button
         public void StartButton_Click(object sender, EventArgs e)
         {
+
             if (capLeft == null) capLeft = new VideoCapture(Camera_Selection_Left.SelectedIndex);
             if (capRight == null) capRight = new VideoCapture(Camera_Selection_Right.SelectedIndex);
-            if (capLeft.IsOpened && capRight.IsOpened) // both cameras working
+            if (capLeft.IsOpened && capRight.IsOpened) // check that both cameras working
             {
                 string str1 = "Press ESCAPE key in any image window to close the program.";
                 MessageBox.Show(str1);
             }
-
+            // Calibrate cameras
             Calibration();
             // Obtaining and showing first frame of loaded video(used as the base for difference detection)
             backgroundFrame_l = capLeft.QueryFrame();
@@ -230,6 +226,9 @@ namespace stereoLoadParams
             CvInvoke.Imshow(BackgroundFrameWindowName_l, backgroundLeftCrop);
             CvInvoke.Imshow(BackgroundFrameWindowName_r, backgroundRightCrop);
 
+            //backgroundLeftCrop.Save(Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\bgLeft.jpg");
+            //backgroundRightCrop.Save(Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\bgRight.jpg");
+
             // Connect to drone and takeoff from the ground
             rmt.SendHandShake();
             rmt.Reset();
@@ -239,90 +238,15 @@ namespace stereoLoadParams
             CvInvoke.Imshow("Press Here", cxFrame);
             CvInvoke.WaitKey(5000);
             rmt.Takeoff();
-            CvInvoke.WaitKey(5000);
+            CvInvoke.WaitKey(2500);
 
 
             //Handling video frames(image processing and contour detection)      
             VideoProcessingLoop(capLeft, backgroundLeftCrop, capRight, backgroundRightCrop, rmapx1, rmapy1, rmapx2, rmapy2, Rec1, Rec2);        
         }
 
-        private void Calibration()
-        {
-            String imagesPath = calibrationImagesPath.Text;
-            if (imageCalibration != true)
-            {
-                FileStorage fs = new FileStorage("stereo.yml", FileStorage.Mode.Read);
-                fs["camMat1"].ReadMat(camMat1);
-                fs["camMat2"].ReadMat(camMat2);
-                fs["dist1"].ReadMat(dist1);
-                fs["dist2"].ReadMat(dist2);
-                //fs["R"].ReadMat(R);
-                //fs["T"].ReadMat(T);
-            }
-            if (imageCalibration == true)
-            {
-                for (int i = 0; i < bufferLength * 2; i++)
-                {
-                    chessFrameL = CvInvoke.Imread(imagesPath + "\\camera1\\image_" + i.ToString() + ".jpg");
-                    chessFrameR = CvInvoke.Imread(imagesPath + "\\camera2\\image_" + i.ToString() + ".jpg");
+        //partial void Calibration();
 
-                    patternLeftFound = CvInvoke.FindChessboardCorners(chessFrameL, patternSize, cornersVecLeft, CalibCbType.NormalizeImage | CalibCbType.AdaptiveThresh);
-                    patternRightFound = CvInvoke.FindChessboardCorners(chessFrameR, patternSize, cornersVecRight, CalibCbType.NormalizeImage | CalibCbType.AdaptiveThresh);
-
-                    if (patternLeftFound && patternRightFound)
-                    {
-                        CvInvoke.CvtColor(chessFrameL, grayLeft, ColorConversion.Bgr2Gray);
-                        CvInvoke.CvtColor(chessFrameR, grayRight, ColorConversion.Bgr2Gray);
-                        //CvInvoke.CornerSubPix(grayLeft, cornersVecLeft, new Size(11, 11), new Size(-1, -1), new MCvTermCriteria(30, 0.1));
-                        //CvInvoke.CornerSubPix(grayRight, cornersVecRight, new Size(11, 11), new Size(-1, -1), new MCvTermCriteria(30, 0.1));
-
-                        CvInvoke.DrawChessboardCorners(chessFrameL, patternSize, cornersVecLeft, patternLeftFound);
-                        CvInvoke.DrawChessboardCorners(chessFrameR, patternSize, cornersVecRight, patternRightFound);
-
-                        CvInvoke.Imshow("Calibration image left", chessFrameL);
-                        CvInvoke.Imshow("Calibration image right", chessFrameR);
-                        CvInvoke.WaitKey(10);
-                        imagePoints1[bufferSavepoint] = cornersVecLeft.ToArray();
-                        imagePoints2[bufferSavepoint] = cornersVecRight.ToArray();
-                        bufferSavepoint++;
-                        if (bufferSavepoint == bufferLength)
-                            break;
-                    }
-
-                }
-                CvInvoke.DestroyAllWindows();
-                //fill the MCvPoint3D32f with correct mesurments
-                for (int k = 0; k < bufferLength; k++)
-                {
-                    //Fill our objects list with the real world mesurments for the intrinsic calculations
-                    List<MCvPoint3D32f> object_list = new List<MCvPoint3D32f>();
-                    for (int i = 0; i < height; i++)
-                    {
-                        for (int j = 0; j < width; j++)
-                        {
-                            object_list.Add(new MCvPoint3D32f(j * 20.0F, i * 20.0F, 0.0F));
-                        }
-                    }
-                    cornersObjectPoints[k] = object_list.ToArray();
-                }
-                
-                CvInvoke.CalibrateCamera(cornersObjectPoints, imagePoints1, chessFrameL.Size, camMat1, dist1, CalibType.Default, new MCvTermCriteria(100, 1e-5), out rvecs, out tvecs);
-                CvInvoke.CalibrateCamera(cornersObjectPoints, imagePoints2, chessFrameL.Size, camMat2, dist2, CalibType.Default, new MCvTermCriteria(100, 1e-5), out rvecs, out tvecs);
-                
-                CvInvoke.StereoCalibrate(cornersObjectPoints, imagePoints1, imagePoints2, camMat1, dist1, camMat2, dist2, chessFrameL.Size,
-                                                                  R, T, essential, fundamental, CalibType.FixAspectRatio | CalibType.ZeroTangentDist| CalibType.SameFocalLength| CalibType.RationalModel| CalibType.UseIntrinsicGuess| CalibType.FixK3|CalibType.FixK4|CalibType.FixK5, new MCvTermCriteria(100, 1e-5));
-
-                CvInvoke.StereoRectify(camMat1, dist1, camMat2, dist2, chessFrameL.Size, R, T, R1, R2, P1, P2, Q, StereoRectifyType.CalibZeroDisparity, 0,
-                             chessFrameL.Size, ref Rec1, ref Rec2);
-
-                ////This will Show us the usable area from each camera
-                //MessageBox.Show("Left: " + Rec1.ToString() + " \nRight: " + Rec2.ToString());
-            }
-            // Create transformation maps 
-            CvInvoke.InitUndistortRectifyMap(camMat1, dist1, R1, P1, chessFrameL.Size, DepthType.Cv32F, rmapx1, rmapy1);
-            CvInvoke.InitUndistortRectifyMap(camMat2, dist2, R2, P2, chessFrameL.Size, DepthType.Cv32F, rmapx2, rmapy2);
-            MessageBox.Show("Calibration has ended");
-        }
         public void VideoProcessingLoop(VideoCapture capture_l, Mat backgroundFrame_l, VideoCapture capture_r, Mat backgroundFrame_r, Mat rmapx1, Mat rmapy1, Mat rmapx2, Mat rmapy2, Rectangle Rec1, Rectangle Rec2)
         {
             var stopwatch = new Stopwatch();// Used to measure video processing performance
@@ -356,9 +280,10 @@ namespace stereoLoadParams
                     // Calculate drone 3D coordinate
                     stopwatch_3d_calculate.Restart(); // 3D calculate - Start
                     point3D.CalculateCoordinate3D(point_center_l.X, point_center_r.X, point_center_r.Y);
-                    Z_3d = point3D.GetZ3D();
                     X_3d = point3D.GetX3D();
                     Y_3d = point3D.GetY3D();
+                    Z_3d = point3D.GetZ3D();
+
                     stopwatch_3d_calculate.Stop(); // 3D calculate - End
 
                     // Check drone position accodring to target and update drone command
@@ -371,13 +296,14 @@ namespace stereoLoadParams
                     ShowWindowsWithImageProcessingStages();
                     
 
-                    int key = CvInvoke.WaitKey(10);// Wait 10msec between frames to not overload video stream
+                    int key = CvInvoke.WaitKey(3);// Wait 10msec between frames to not overload video stream
                     // Close program if Esc key was pressed
-                    if (key == 27)
-                    {
-                        rmt.Land();
-                        Environment.Exit(0);
-                    }
+                    //if (key == 27)
+                    //{
+                    //    rmt.Land();
+                    //    CvInvoke.WaitKey(5000);
+                    //    Environment.Exit(0);
+                    //}
                 }
                 else
                 {
@@ -531,7 +457,7 @@ namespace stereoLoadParams
         {
             if (loadCalib.Checked)
             {
-                imageCalibration = !(newCalib.Checked);
+                imageCalibration = !(loadCalib.Checked);
                 newCalib.Enabled = false;
             }
             else
@@ -543,8 +469,13 @@ namespace stereoLoadParams
         {
             if (folderBrowserDialog1.ShowDialog() == DialogResult.OK && (loadCalib.Checked || newCalib.Checked))
             {
-                calibrationImagesPath.Text = folderBrowserDialog1.SelectedPath;
+                calibrationPath.Text = folderBrowserDialog1.SelectedPath;
             }
+
+            //if (openFileDialog1.ShowDialog() == DialogResult.OK && (loadCalib.Checked || newCalib.Checked))
+            //{
+            //    calibrationPath.Text = openFileDialog1.;
+            //}
         }
 
 
