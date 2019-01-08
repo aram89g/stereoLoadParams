@@ -27,8 +27,17 @@ namespace cxOF
 
         static int MIN = 0;
         static int MAX = 255;
-        static int step = 20;
-        static double delta = 0.15;
+        static int step = 5;
+        static int stepX = 13;
+        static int stepY = 15;
+        static int stepZ = 15;
+        //static int stepX = 15;
+        //static int stepY = 15;
+        //static int stepZ = 15;
+        //static int stepX = 5;
+        //static int stepY = 15;
+        //static int stepZ = 12;
+        static double delta = 0.07;
         private byte[] message;
 
         public CxOF()
@@ -60,9 +69,9 @@ namespace cxOF
         /*------------------------------------------------------------------
         * Validate the step function with constraints
         -------------------------------------------------------------------*/
-        public int ValidStep(int value, int step, int min, int max)
+        public int ValidStep(int value, int s, int min, int max)
         {
-            return Math.Max(Math.Min(max, value + step), min);
+            return Math.Max(Math.Min(max, value + s), min);
         }
 
         /*------------------------------------------------------------------
@@ -71,7 +80,8 @@ namespace cxOF
         public void SendHandShake()
         {
             udpClient.Send(headerNoHandshake, headerNoHandshake.Length);
-            Console.WriteLine(BitConverter.ToString(headerNoHandshake));
+            //Console.WriteLine(BitConverter.ToString(headerNoHandshake));
+            Console.WriteLine("Handshake\n");
         }
 
         /*------------------------------------------------------------------
@@ -92,7 +102,7 @@ namespace cxOF
         {
             CreateMessage();
             udpClient.Send(message, message.Length);
-            Console.WriteLine(BitConverter.ToString(message));
+            //Console.WriteLine(BitConverter.ToString(message));
         }
 
         /*------------------------------------------------------------------
@@ -177,59 +187,73 @@ namespace cxOF
          * inputs: (X,Y,Z) coordinates of the drone
          * updates drone commands according to drone and target position.
         -------------------------------------------------------------------*/
-        public void InstructionCalculate(double X, double Y, double Z)
+        //public void InstructionCalculate(double X, double Y, double Z)
+        public void InstructionCalculate(StereoPoint3D drone, ref Point3D target)
         {
+            double X = drone.GetX3D();
+            double Y = drone.GetY3D();
+            double Z = drone.GetZ3D();
+            bool xValid = false;
+            bool yValid = false;
+            bool zValid = false;
 
-            int key = CvInvoke.WaitKey(50);            
+            int key = CvInvoke.WaitKey(10);            
             if (key == -1)
             {
                 // Horizontal axis
-                if ((X < (TargetCoordinate.X_target + delta)) && (X > (TargetCoordinate.X_target - delta)))
+                if ((X < (target.GetX() + delta)) && (X > (target.GetX() - delta)))
                 {
                     right_left_mov = 128;
                     mode = 0;
+                    xValid = true;
                 }
-                if (X < TargetCoordinate.X_target)
+                else if (X < target.GetX())
                 {
-                    right_left_mov = ValidStep(128 + step, 0, 0, 255);
+                    right_left_mov = ValidStep(128 + stepX, 0, 0, 255);
                     Console.WriteLine("goes right");
                 }
                 else
                 {
-                    right_left_mov = ValidStep(128 - step, 0, 0, 255);
+                    right_left_mov = ValidStep(128 - stepX, 0, 0, 255);
                     Console.WriteLine("goes left");
                 }
                 // Vertical axis
-                if ((Y < (TargetCoordinate.Y_target + delta)) && (Y > (TargetCoordinate.Y_target - delta)))
+                if ((Y < (target.GetY() + delta)) && (Y > (target.GetY() - delta)))
                 {
-                    up_down = 128;
+                    up_down = 120;
                     mode = 0;
+                    yValid = true;
                 }
-                if (Y < TargetCoordinate.Y_target)
+                else if (Y < target.GetY())
                 {
-                    up_down = ValidStep(128 - step, 0, 0, 255);
+                    up_down = ValidStep(120 - stepY, 0, 0, 255);
                     Console.WriteLine("goes down");
                 }
                 else
                 {
-                    up_down = ValidStep(128 + step, 0, 0, 255);
+                    up_down = ValidStep(120 + stepY + 10, 0, 0, 255);
                     Console.WriteLine("goes up");
                 }
                 //Depth axis
-                if ((Z < (TargetCoordinate.Z_target + delta)) && (Z > (TargetCoordinate.Z_target - delta)))
+                if ((Z < (target.GetZ() + delta)) && (Z > (target.GetZ() - delta)))
                 {
                     forward_back = 128;
                     mode = 0;
+                    zValid = true;
                 }
-                if (Z < TargetCoordinate.Z_target)
+                else if (Z < target.GetZ())
                 {
-                    forward_back = ValidStep(128 + step, 0, 0, 255);
+                    forward_back = ValidStep(128 + stepZ, 0, 0, 255);
                     Console.WriteLine("goes forward");
                 }
                 else
                 {
-                    forward_back = ValidStep(128 - step, 0, 0, 255);
+                    forward_back = ValidStep(128 - stepZ, 0, 0, 255);
                     Console.WriteLine("goes backwards");
+                }
+                if (xValid && yValid && zValid)
+                {
+                    target.arrived = true;                         
                 }
             }
             else

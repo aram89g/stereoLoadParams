@@ -202,6 +202,21 @@ namespace stereoLoadParams
         // This code runs when you press the Start button
         public void StartButton_Click(object sender, EventArgs e)
         {
+            FileStream ostrm;
+            StreamWriter writer;
+            TextWriter oldOut = Console.Out;
+            try
+            {
+                ostrm = new FileStream("./Redirect.txt", FileMode.OpenOrCreate, FileAccess.Write);
+                writer = new StreamWriter(ostrm);
+            }
+            catch (Exception er)
+            {
+                Console.WriteLine("Cannot open Redirect.txt for writing");
+                Console.WriteLine(er.Message);
+                return;
+            }
+            Console.SetOut(writer);
 
             if (capLeft == null) capLeft = new VideoCapture(Camera_Selection_Left.SelectedIndex);
             if (capRight == null) capRight = new VideoCapture(Camera_Selection_Right.SelectedIndex);
@@ -253,9 +268,17 @@ namespace stereoLoadParams
             var stopwatch_3d_calculate = new Stopwatch();// Used to measure 3D calculation performance
 
             int frameNumber = 1;
-            StereoPoint3D point3D = new StereoPoint3D();
+            int targetCnt = 1;
+            StereoPoint3D drone = new StereoPoint3D();
+            Point3D Point1 = new Point3D(0.3, 0 ,1.4);
+            Point3D Point2 = new Point3D(0.3, 0, 1.9);
+            Point3D Point3 = new Point3D(-0.3, 0, 1.9);
+            Point3D Point4 = new Point3D(-0.3, 0, 1.4);
+            Point3D Point5 = new Point3D(0.3, 0, 1.4);
+            Point3D target = Point1;
             while (true)// Loop video
             {
+                Console.WriteLine("************************************Start Frame*************************************\n");
                 // Getting next frame(null is returned if no further frame exists)
                 rawFrame_l = capture_l.QueryFrame();
                 rawFrame_r = capture_r.QueryFrame();
@@ -264,14 +287,14 @@ namespace stereoLoadParams
                 CvInvoke.Remap(rawFrame_l, rawFrame_l, rmapx1, rmapy1, Inter.Linear);
                 CvInvoke.Remap(rawFrame_r, rawFrame_r, rmapx2, rmapy2, Inter.Linear);
                 Mat cropLeft = new Mat(rawFrame_l, Rec1);
-                Mat cropRight = new Mat(rawFrame_r, Rec2);            
+                Mat cropRight = new Mat(rawFrame_r, Rec2);
                 rawFrame_l = cropLeft;
                 rawFrame_r = cropRight;
 
                 if (rawFrame_l != null && rawFrame_r != null)
                 {
                     frameNumber++;
-
+                    
                     // Process frame image to find drone location in the frame
                     stopwatch.Restart();// Frame processing calculate - Start
                     ProcessFrame(backgroundFrame_l, backgroundFrame_r, Threshold, ErodeIterations, DilateIterations);
@@ -279,24 +302,51 @@ namespace stereoLoadParams
 
                     // Calculate drone 3D coordinate
                     stopwatch_3d_calculate.Restart(); // 3D calculate - Start
-                    point3D.CalculateCoordinate3D(point_center_l.X, point_center_r.X, point_center_r.Y);
-                    X_3d = point3D.GetX3D();
-                    Y_3d = point3D.GetY3D();
-                    Z_3d = point3D.GetZ3D();
-
+                    drone.CalculateCoordinate3D(point_center_l.X, point_center_r.X, point_center_r.Y);
+                    X_3d = drone.GetX3D();
+                    Y_3d = drone.GetY3D();
+                    Z_3d = drone.GetZ3D();
+                    
                     stopwatch_3d_calculate.Stop(); // 3D calculate - End
-
+                    Console.WriteLine($"Frame Number: {frameNumber}\n");
+                    Console.WriteLine($"Drone Coordinates:  [X: {X_3d}, Y: {Y_3d}, Z: {Z_3d}]\n");
+                    Console.WriteLine("Drone Instructions:\n");
                     // Check drone position accodring to target and update drone command
-                    rmt.InstructionCalculate(X_3d, Y_3d, Z_3d);
-
+                    rmt.InstructionCalculate(drone, ref target);
+                    if (target.arrived)
+                    {
+                        System.Media.SystemSounds.Asterisk.Play();
+                        targetCnt++;
+                        switch (targetCnt)
+                        {
+                            case 2:
+                                target = Point2;
+                                break;
+                            case 3:
+                                target = Point3;
+                                break;
+                            case 4:
+                                target = Point4;
+                                break;
+                            case 5:
+                                target = Point5;                                
+                                break;
+                            default:
+                                rmt.Land();
+                                CvInvoke.WaitKey(10000);
+                                Environment.Exit(0);
+                                break;
+                        }
+                        
+                    }
                     // Write data to Frame
-                    WriteFrameInfo(stopwatch.ElapsedMilliseconds, stopwatch_3d_calculate.ElapsedMilliseconds, frameNumber);
+                    WriteFrameInfo(stopwatch.ElapsedMilliseconds, stopwatch_3d_calculate.ElapsedMilliseconds, frameNumber, targetCnt);
 
                     // Show all frame processing stages
                     ShowWindowsWithImageProcessingStages();
-                    
 
-                    int key = CvInvoke.WaitKey(3);// Wait 10msec between frames to not overload video stream
+
+                    //int key = CvInvoke.WaitKey(10);// Wait 10msec between frames to not overload video stream
                     // Close program if Esc key was pressed
                     //if (key == 27)
                     //{
@@ -304,6 +354,7 @@ namespace stereoLoadParams
                     //    CvInvoke.WaitKey(5000);
                     //    Environment.Exit(0);
                     //}
+                    Console.WriteLine("************************************End Frame*************************************\n\n");
                 }
                 else
                 {
@@ -417,7 +468,7 @@ namespace stereoLoadParams
 
             WriteMultilineText(frame, info, new Point(box.Right + 5, center.Y));
         }
-        private static void WriteFrameInfo(long elapsedMs, long _3d_elapsedMs, int frameNumber)
+        private static void WriteFrameInfo(long elapsedMs, long _3d_elapsedMs, int frameNumber, int targetCnt )
         {
             var info = new string[] {
                 $"Frame Number: {frameNumber}",
@@ -427,7 +478,8 @@ namespace stereoLoadParams
                 $"Right Camera - Position: {point_center_r.X}, {point_center_r.Y}",
                 $"X_3d : {X_3d} [meter]",
                 $"Y_3d : {Y_3d} [meter]",
-                $"Z_3d : {Z_3d} [meter]"
+                $"Z_3d : {Z_3d} [meter]",
+                $"Destination: target {targetCnt}"
         };
 
             // Save frames to PC
@@ -437,8 +489,8 @@ namespace stereoLoadParams
             //finalFrame_r.Save(desktop + "\\savedFrames\\Right_" + frameNumber + ".jpg");
             WriteMultilineText(finalFrame_l, info, new Point(5, 10));
             WriteMultilineText(finalFrame_r, info, new Point(5, 10));
-            //finalFrame_l.Save(desktop + "\\savedFrames\\Left_withData" + frameNumber + ".jpg");
-            //finalFrame_r.Save(desktop + "\\savedFrames\\Right_withData" + frameNumber + ".jpg");
+            finalFrame_l.Save(desktop + "\\savedFrames\\" + frameNumber + "Left_withData.jpg");
+            finalFrame_r.Save(desktop + "\\savedFrames\\" + frameNumber + "Right_withData.jpg");
         }
 
         private void newCalib_CheckedChanged(object sender, EventArgs e)
