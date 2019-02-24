@@ -11,7 +11,13 @@ namespace stereoLoadParams
 {
     public partial class VisionApp
     {
-
+        #region Calibration variables
+        //Calibration variables
+        static int bufferLength = 38; // define how many good images needed
+        int bufferSavepoint = 0;
+        bool patternLeftFound; // True if chessboard found in image
+        bool patternRightFound; // True if chessboard found in image
+        #endregion
         public void Calibration()
         {
             String imagesPath = calibrationPath.Text;
