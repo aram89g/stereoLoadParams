@@ -9,15 +9,6 @@ public class Point3D
     private double Z_target;
     public bool arrived;
 
-
-
-    //public Point3D()
-    //{
-    //    X_target = 0;
-    //    Y_target = 0;
-    //    Z_target = 1.5;
-    //    arrived = false;
-    //}
     public Point3D(double x, double y, double z)
     {
         X_target = x;

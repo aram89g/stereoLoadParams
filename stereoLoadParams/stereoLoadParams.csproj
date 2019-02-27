@@ -78,6 +78,7 @@
     <Compile Include="cxOF.cs" />
     <Compile Include="stereoPoint3D.cs" />
     <Compile Include="TargetCoordinate.cs" />
+    <Compile Include="Tello.cs" />
     <Compile Include="VisionApp.cs">
       <SubType>Form</SubType>
     </Compile>

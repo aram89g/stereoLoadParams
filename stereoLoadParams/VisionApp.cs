@@ -1,12 +1,11 @@
-﻿//Remote Drone cxOF
-using cxOF;
-//DiresctShow
+﻿// DiresctShow
 using DirectShowLib;
-//EMGU
+// EMGU
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using Emgu.CV.Util;
+// System
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -22,7 +21,8 @@ namespace stereoLoadParams
         static bool imageCalibration; // Calibration flag, do new calibration or load pramaters from old one
         static bool debugMode = false; // Debug flag
 
-        public CxOF rmt = new CxOF(); // CX-OF drone remote
+        public Tello rmt = new Tello();
+        //public CxOF rmt = new CxOF(); // CX-OF drone remote
         #region Traget coordinates
         double X_target;
         double Y_target;
@@ -178,7 +178,6 @@ namespace stereoLoadParams
         // This code runs when you press the Start button
         public void StartButton_Click(object sender, EventArgs e)
         {
-
             FileStream ostrm;
             StreamWriter writer;
             TextWriter oldOut = Console.Out;
@@ -220,41 +219,34 @@ namespace stereoLoadParams
             CvInvoke.Imshow(BackgroundFrameWindowName_l, backgroundLeftCrop);
             CvInvoke.Imshow(BackgroundFrameWindowName_r, backgroundRightCrop);
 
-            //backgroundLeftCrop.Save(Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\bgLeft.jpg");
-            //backgroundRightCrop.Save(Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\bgRight.jpg");
-
-            // Connect to drone and takeoff from the ground
-            rmt.SendHandShake();
-            rmt.Reset();
-            Thread cxThread = new Thread(new ThreadStart(rmt.ThreadProc)); // Create thread to keep session alive with drone
-            cxThread.Start();
-            rmt.Send();
+            // Drone takeoff from the ground            
             CvInvoke.Imshow("Press Here", cxFrame);
-            CvInvoke.WaitKey(5000);
-            rmt.Takeoff();
+            rmt.send_command("takeoff");
             CvInvoke.WaitKey(3000);
-            //System.Media.SystemSounds.Exclamation.Play();
+            System.Media.SystemSounds.Exclamation.Play();
 
             //Handling video frames(image processing and contour detection)      
             VideoProcessingLoop(capLeft, backgroundLeftCrop, capRight, backgroundRightCrop, rmapx1, rmapy1, rmapx2, rmapy2, Rec1, Rec2);        
         }
 
-        //partial void Calibration();
-
         public void VideoProcessingLoop(VideoCapture capture_l, Mat backgroundFrame_l, VideoCapture capture_r, Mat backgroundFrame_r, Mat rmapx1, Mat rmapy1, Mat rmapx2, Mat rmapy2, Rectangle Rec1, Rectangle Rec2)
         {
+            // Statistics timers
             var stopwatch = new Stopwatch();// Used to measure video processing performance
             var stopwatch_3d_calculate = new Stopwatch();// Used to measure 3D calculation performance
 
             int frameNumber = 1;
+
+            #region Flight Plan
             int targetCnt = 1;
             StereoPoint3D drone = new StereoPoint3D();
-            Point3D Point5 = new Point3D(0.3, 0 ,0.8);
-            Point3D Point1 = new Point3D(0.3, 0, 1.5);
-            Point3D Point2 = new Point3D(-0.3, 0, 1.5);
-            Point3D Point3 = new Point3D(-0.3, 0, 0.8);
-            Point3D Point4 = new Point3D(0.3, 0, 0.8);
+            Point3D Point5 = new Point3D(0.2, 0 ,0.7);
+            Point3D Point1 = new Point3D(0.3, 0, 1.1);
+            Point3D Point2 = new Point3D(-0.3, 0, 1.1);
+            Point3D Point3 = new Point3D(-0.2, 0, 0.7);
+            Point3D Point4 = new Point3D(0.2, 0, 0.7);
             Point3D target = Point1;
+            #endregion
             while (true)// Loop video
             {
                 Console.WriteLine("************************************Start Frame*************************************\n");
@@ -299,22 +291,18 @@ namespace stereoLoadParams
                         {
                             case 2:
                                 target = Point2;
-                                rmt.Stop();
                                 break;
                             case 3:
                                 target = Point3;
-                                rmt.Stop();
                                 break;
                             case 4:
                                 target = Point4;
-                                rmt.Stop();
                                 break;
                             case 5:
                                 target = Point5;
-                                rmt.Stop();
                                 break;
                             default:
-                                rmt.Land();
+                                rmt.send_command("land");
                                 CvInvoke.WaitKey(10000);
                                 Environment.Exit(0);
                                 break;
@@ -327,15 +315,15 @@ namespace stereoLoadParams
                     // Show all frame processing stages
                     ShowWindowsWithImageProcessingStages();
 
-
-                    //int key = CvInvoke.WaitKey(10);// Wait 10msec between frames to not overload video stream
+                    // Enable program exit from keyboard
+                    int key = CvInvoke.WaitKey(5);
                     // Close program if Esc key was pressed
-                    //if (key == 27)
-                    //{
-                    //    rmt.Land();
-                    //    CvInvoke.WaitKey(5000);
-                    //    Environment.Exit(0);
-                    //}
+                    if (key == 27)
+                    {
+                        rmt.send_command("land");
+                        CvInvoke.WaitKey(5000);
+                        Environment.Exit(0);
+                    }
                     Console.WriteLine("************************************End Frame*************************************\n\n");
                 }
                 else
@@ -530,7 +518,5 @@ namespace stereoLoadParams
             //    calibrationPath.Text = openFileDialog1.;
             //}
         }
-
-
     }
 }

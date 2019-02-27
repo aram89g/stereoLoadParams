@@ -25,11 +25,11 @@ namespace stereoLoadParams
             {
                 try
                 {
-                FileStorage fs = new FileStorage(calibrationPath.Text, FileStorage.Mode.Read);
-                fs["rmapx1"].ReadMat(rmapx1);
-                fs["rmapy1"].ReadMat(rmapy1);
-                fs["rmapx2"].ReadMat(rmapx2);
-                fs["rmapy2"].ReadMat(rmapy2);
+                    FileStorage fs = new FileStorage(calibrationPath.Text, FileStorage.Mode.Read);
+                    fs["rmapx1"].ReadMat(rmapx1);
+                    fs["rmapy1"].ReadMat(rmapy1);
+                    fs["rmapx2"].ReadMat(rmapx2);
+                    fs["rmapy2"].ReadMat(rmapy2);
 
                     MessageBox.Show("Transformation maps loaded successfully");
                 }
