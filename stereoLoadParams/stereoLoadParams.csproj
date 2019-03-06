@@ -75,6 +75,7 @@
     <Compile Include="Calibration.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="commandDelays.cs" />
     <Compile Include="cxOF.cs" />
     <Compile Include="stereoPoint3D.cs" />
     <Compile Include="TargetCoordinate.cs" />

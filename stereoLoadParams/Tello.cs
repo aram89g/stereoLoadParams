@@ -1,17 +1,25 @@
-﻿using System;
+﻿/* 
+ * Description: This is a tello remote control that is used to communicate with the tello drone over UDP.
+ *              It has control variables that can be used to send the drone RC commands in all channels, 
+ *              and it can send all the commands from the Tello SDK 1.3.
+ *              Logging is done through two files:
+ *                  - "Desktop/state.txt":  drone statistics.
+ *                  - "Desktop/response.txt": drone responses to commands.
+ *              It throws a TimeoutException if the drone hasn't responded to a sent command.
+ * Created by:  Aram Gasparian.
+ * Date:        Feb 2019.
+ */
+
+using System;
 using System.IO;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using System.Threading;
 using System.Net;
 using System.Net.Sockets;
-using System.Diagnostics;
 using Emgu.CV;
-using Emgu.CV.CvEnum;
-/*---------------------------------------------------------------------------------------------------
- * This class represents the Tello drone control system, It send's commands using UDP.
- ---------------------------------------------------------------------------------------------------*/
+using System.Collections.Generic;
+using PIDControllers;
+
 public class Tello
 {
     string tello_host = "192.168.10.1";
@@ -19,105 +27,303 @@ public class Tello
     int tello_port = 8889;
     int local_state_port = 8890;
     int tello_video_port = 11111;
+    int timeout = 7000; // msec
 
-    bool recvFlag = false;
+    IPEndPoint local_endpoint;
     IPEndPoint tello_endpoint;
-    UdpClient tello_socket;
 
-    // Video Recieve thread
-    Mat frame;
+    // Response thread
+    Thread response_thread;
+    Socket socket;
+
+    // Video thread
+    Socket video_socket;
+    Mat frame = new Mat();
     bool is_new_frame_to_process;
-    string video_stream_url;
     VideoCapture cap;
     Thread video_receive_thread;
 
-    //controls
+    // Controls
     public int left_right = 0;
     public int down_up = 0;
     public int back_forward = 0;
     public int yaw = 0;
 
-    // Battery thread
-    byte[] response;
-    Thread keep_alive_thread; // Create thread to keep session alive with drone
-
-    // State Recieve thread
+    // State thread
     IPEndPoint state_endpoint;
-    UdpClient state_socket;
+    Socket state_socket;
     Thread state_receive_thread;
-    static void OnUdpData(IAsyncResult result)
+
+    // Log files
+    static string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+    StreamWriter stateFile = new StreamWriter(desktop + @"\state.txt");
+    StreamWriter responseFile = new StreamWriter(desktop + @"\response.txt");
+
+    byte[] response;
+    bool respFlag;
+    bool abortFlag;
+
+    PIDController pidX = new PIDController();
+    PIDController pidY = new PIDController();
+    PIDController pidZ = new PIDController();
+
+    //static double Min = -30;
+    //static double Max = 30;
+    
+    static double min = -0.20; // [m\sec] maximum speed for pid output
+    static double max = 0.20; // [m\sec] minimum speed for pid output
+
+    double stateX;
+    double stateY;
+    double stateZ;
+
+    double delta = 0.1;
+
+    double Tix = 100;
+    double Tdx = 0.5;
+    double Kpx = (1.0 / 7) * 3;
+    double Kix = 0;
+    double Kdx = 0;
+
+    double Tiy = 100;
+    double Tdy = 0.5;
+    double Kpy = (1.0 / 7) * 3;
+    double Kiy = 0;
+    double Kdy = 0;
+
+    double Tiz = 100;
+    double Tdz = 0.05;
+    double Kpz = (1.0 / 7) * 3;
+    double Kiz = 0;
+    double Kdz = 0;
+    /**********************************************************
+     * send a command to the drone and busy wait for it's response,
+     * throws TimeoutException if timeout passsed
+     **********************************************************/
+    public void SendCommand(string command)
     {
-        // this is what had been passed into BeginReceive as the second parameter:
-        UdpClient socket = result.AsyncState as UdpClient;
-        // points towards whoever had sent the message:
-        IPEndPoint source = new IPEndPoint(0, 0);
-        // get the actual message and fill out the source:
-        byte[] response = socket.EndReceive(result, ref source);
-        // do what you'd like with `message` here:
-        Console.WriteLine(Encoding.UTF8.GetString(response));
-        // schedule the next receive operation once reading is done:
-        socket.BeginReceive(new AsyncCallback(OnUdpData), socket);
+        abortFlag = false;
+        byte[] cmd = Encoding.UTF8.GetBytes(command);
+        socket.SendTo(cmd, cmd.Length, SocketFlags.None, tello_endpoint);
+        //Timer timer = new Timer(SetAbortFlag, null, timeout, Timeout.Infinite);
+        //while (respFlag == false)
+        //{
+        //    if (abortFlag == true)
+        //    {
+        //        socket.SendTo(Encoding.UTF8.GetBytes("land"), Encoding.UTF8.GetBytes("land").Length, SocketFlags.None, tello_endpoint);
+        //        throw new TimeoutException($"Command: {command} didn't have a response");                
+        //    }
+        //}
+        //timer.Dispose();
+        //respFlag = false;
     }
 
-    public void send_command(string command)
+    public void InitializePIDs()
     {
-        byte[] cmd = Encoding.UTF8.GetBytes(command);
-        tello_socket.Send(cmd, cmd.Length);
-    }
-    public void send_rc_control()
-    {
-        send_command($"rc {left_right} {back_forward} {down_up} {yaw}");
+        // initialize PID constants
+        Kix = Kpx / Tix;
+        Kdx = Kpx * Tdx;
+        Kiy = Kpy / Tiy;
+        Kdy = Kpy * Tdy;
+        Kiz = Kpz / Tiz;
+        Kdz = Kpz * Tdz;
+
+        // Left-Right control PID
+        pidX.Kp = Kpx;
+        pidX.Ki = Kix;
+        pidX.Kd = Kdx;
+        pidX.MaxOutput = max;
+        pidX.MinOutput = min;
+        pidX.MaxInput = 0.4;
+        pidX.MinInput = -0.4;
+        pidX.Tolerance = delta * 100 / (pidX.MaxInput - pidX.MinInput);
+
+        // Up-Down control PID
+        pidY.Kp = Kpy;
+        pidY.Ki = Kiy;
+        pidY.Kd = Kdy;
+        pidY.MaxOutput = max;
+        pidY.MinOutput = min;
+        pidY.MaxInput = 0.5;
+        pidY.MinInput = -0.5;
+        pidY.Tolerance = delta * 100 / (pidY.MaxInput - pidY.MinInput);
+
+        // Forward-Back control PID
+        pidZ.Kp = Kpz;
+        pidZ.Ki = Kiz;
+        pidZ.Kd = Kdz;
+        pidZ.MaxOutput = max;
+        pidZ.MinOutput = min;
+        pidZ.MaxInput = 3;
+        pidZ.MinInput = 0;
+        pidZ.Tolerance = delta * 100 / (pidZ.MaxInput - pidZ.MinInput);
     }
 
     public Tello()
     {
+        InitializePIDs();
+
         tello_endpoint = new IPEndPoint(IPAddress.Parse(tello_host), tello_port);
+        local_endpoint = new IPEndPoint(IPAddress.Parse(local_host), tello_port);
         state_endpoint = new IPEndPoint(IPAddress.Parse(local_host), local_state_port);
-        tello_socket = new UdpClient(tello_port);
-        tello_socket.Connect(tello_endpoint);
-        tello_socket.BeginReceive(new AsyncCallback(OnUdpData), tello_socket);
-        send_command("command");
-        keep_alive_thread = new Thread(new ThreadStart(keepAliveProc));
 
-        cap = new VideoCapture($"udp://" + tello_host + ":{tello_port}");
-        video_receive_thread = new Thread(new ThreadStart(videoReceiveProc));
-        video_receive_thread.Start();
+        // socket for sending commands and recieve responses
+        socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        socket.Bind(local_endpoint);
+        response_thread = new Thread(new ThreadStart(ResponseProc));
+        response_thread.Start();
 
-        Socket state_socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        // socket for recieving tello drone state
+        state_socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
         state_socket.Bind(state_endpoint);
-        state_receive_thread = new Thread(new ThreadStart(stateReceiveProc));
+        state_receive_thread = new Thread(new ThreadStart(StateReceiveProc));
         state_receive_thread.Start();
-    }
 
-    public void keepAliveProc()
-    {
-        send_command("battery?");
-        Thread.Sleep(9000);
-    }
+        // initiate drone SDK mode
+        SendCommand("command");
+        Thread.Sleep(500);
 
-    public void videoReceiveProc()
-    {
-        while(true)
+        // initiate drone SDK mode
+        SendCommand("streamon");
+        Thread.Sleep(2000);
+
+        // recieve video from tello drone
+        cap = new VideoCapture(@"udp://" + tello_host + $":{tello_video_port}");
+        if (!cap.IsOpened)
         {
-            cap.Read(frame);
-            is_new_frame_to_process = true;
+            Console.WriteLine("Stream is not opened");
+        }
+        video_receive_thread = new Thread(new ThreadStart(VideoReceiveProc));
+        video_receive_thread.Start();
+        
+    }
+
+    /**********************************************************
+     * drone video stream thread, takes frame from stream and if 
+     * there is a valid frame raises flag "is_new_frame_to_process"
+     **********************************************************/
+    public void VideoReceiveProc()
+    {
+        while (true)
+        {
+            frame = cap.QueryFrame();
+            if (!frame.IsEmpty)
+            {
+                is_new_frame_to_process = true;
+            }
         }
     }
-    public bool Is_new_frame_ready()
+    /**********************************************************
+     * return true if there is a new frame to process
+     **********************************************************/
+    public bool IsNewFrameReady()
     {
         return is_new_frame_to_process;
     }
 
-    public Mat get_last_frame()
+    public Mat GetLastFrame()
     {
         is_new_frame_to_process = false;
         return frame;
     }
-    public void stateReceiveProc()
-    {
 
+    /********************************************************** 
+     * recieve drone statistics about it's battery, location, 
+     * speed, battery, barometer, temperature, 
+     * pitch, roll, yaw, time of flight.
+     * (statistics are seperated by a semicolon(;)
+     * Save it to a file.
+     **********************************************************/
+    public void StateReceiveProc()
+    {
+        int buffer_size = 1518;
+        byte[] buff = new byte[buffer_size];
+        while (true)
+        {
+            state_socket.Receive(buff);
+            stateFile.WriteLine(Encoding.UTF8.GetString(buff));
+        }
     }
 
+    /**********************************************************
+     * recieve responses to sent commands, when a response is 
+     * recieved raises flag to alert that the resonse has 
+     * recieved and writes it to a file 
+     **********************************************************/
+    public void ResponseProc()
+    {
+        int buffer_size = 1518;
+        byte[] buff = new byte[buffer_size];
+        while (true)
+        {
+            socket.Receive(buff);
+            respFlag = true;
+            Console.WriteLine(Encoding.UTF8.GetString(buff));
+            responseFile.WriteLine(Encoding.UTF8.GetString(buff));
+        }
+    }
+
+    /**********************************************************
+    * raise abort flag if drone didn't send response,
+    * which means problem with communication
+    **********************************************************/
+    public void SetAbortFlag(Object state)
+    {
+        abortFlag = true;
+    }
+
+    /**********************************************************
+     * Basic drone command shorcuts
+     **********************************************************/
+
+    // Send a RC command (all channels)
+    public void SendRcControl()
+    {
+        SendCommand($"rc {left_right} {back_forward} {down_up} {yaw}");
+    }
+    // drone takeoff from ground
+    public void Takeoff()
+    {
+        SendCommand("takeoff");
+    }
+    // drone land
+    public void Land()
+    {
+        SendCommand("land");
+    }
+    // enable video stream
+    public void SetVideoStreamOn()
+    {
+        SendCommand("streamon");
+    }
+    // disable video stream
+    public void SetVideoStreamOff()
+    {
+        SendCommand("streamoff");
+    }
+
+    /**********************************************************
+     * operetions to do when exisiting the program
+     **********************************************************/
+    public void Exit()
+    {
+        // close files
+        responseFile.Close();
+        stateFile.Close();
+    }
+
+    /***********************************************************
+    * check if drone is on target
+    ***********************************************************/
+    public bool OnTarget(double setpoint, double input, double delta)
+    {
+        return Math.Abs(setpoint - input) < delta;
+    }
+
+    /***********************************************************
+    * inputs: (X,Y,Z) coordinates of the drone
+    * updates drone commands according to drone and target position.
+    ***********************************************************/
     public void InstructionCalculate(StereoPoint3D drone, ref Point3D target)
     {
         double delta = 0.1;
@@ -135,7 +341,55 @@ public class Tello
 
         Console.WriteLine($"Drone Coordinates:  [X: {drone.GetX3D()}, Y: {drone.GetY3D()}, Z: {drone.GetZ3D()}]\n");
         Console.WriteLine($"Target Coordinates:  [X: {target.GetX()}, Y: {target.GetY()}, Z: {target.GetZ()}]\n");
+        
+        pidX.Input = drone.GetX3D();
+        pidX.Setpoint = target.GetX();
 
+        pidY.Input = drone.GetY3D();
+        pidY.Setpoint = target.GetY();
+
+        pidZ.Input = drone.GetZ3D();
+        pidZ.Setpoint = target.GetZ();
+        Console.WriteLine($"PID X:  [Kp: {pidX.Kp}, Ki: {pidX.Ki}, Kd: {pidX.Kd}]\n");
+        Console.WriteLine($"PID Y:  [Kp: {pidY.Kp}, Ki: {pidY.Ki}, Kd: {pidY.Kd}]\n");
+        Console.WriteLine($"PID Z:  [Kp: {pidZ.Kp}, Ki: {pidZ.Ki}, Kd: {pidZ.Kd}]\n");
+
+        xValid = OnTarget(pidX.Setpoint, pidX.Input, delta);
+        yValid = OnTarget(pidY.Setpoint, pidY.Input, delta);
+        zValid = OnTarget(pidZ.Setpoint, pidZ.Input, delta);
+
+        stateX = pidX.PerformPID();
+        stateY = pidY.PerformPID();
+        stateZ = pidZ.PerformPID();
+
+        if (!double.IsNaN(stateX) && !double.IsNaN(stateY) && !double.IsNaN(stateZ))
+        {
+            if (!xValid)
+                left_right = (int)(stateX * 100);
+            if (!yValid)
+                down_up = -1*(int)(stateY * 100);
+            if (!zValid)
+                back_forward = (int)(stateZ * 100);
+
+            Console.WriteLine("PID values:\n");
+            Console.WriteLine($"right_left_mov = {left_right}\n");
+            Console.WriteLine($"up_down = {down_up}\n");
+            Console.WriteLine($"forward_back = {back_forward}\n");
+
+            if (xValid && yValid && zValid)
+            {
+                target.arrived = true;
+                Console.WriteLine("On Target, all axes\n");
+            }
+
+            // Send the RC command to the drone
+            SendRcControl();
+        }
+
+
+        
+        /*
+        
         // Horizontal axis
         if ((X < (target.GetX() + delta)) && (X > (target.GetX() - delta)))
         {
@@ -188,30 +442,10 @@ public class Tello
         {
             target.arrived = true;
         }
-
+        
         // Send the RC command to the drone
-        send_rc_control();
+        SendRcControl();
+        */
     }
-
-    public void Takeoff()
-    {
-        send_command("takeoff");
-    }
-
-    public void Land()
-    {
-        send_command("land");
-    }
-
-    public void Set_video_stream_on()
-    {
-        send_command("streamon");
-    }
-
-    public void Set_video_stream_off()
-    {
-        send_command("streamoff");
-    }
-
 
 }

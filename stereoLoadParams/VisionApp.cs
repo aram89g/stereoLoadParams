@@ -12,6 +12,8 @@ using System.Drawing;
 using System.IO;
 using System.Threading;
 using System.Windows.Forms;
+using System.Collections.Generic;
+
 
 namespace stereoLoadParams
 {
@@ -21,21 +23,39 @@ namespace stereoLoadParams
         static bool imageCalibration; // Calibration flag, do new calibration or load pramaters from old one
         static bool debugMode = false; // Debug flag
 
-        public Tello rmt = new Tello();
-        //public CxOF rmt = new CxOF(); // CX-OF drone remote
-        #region Traget coordinates
+        public Tello rmt;
+        static public string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+
+        DateTime baseTime = new DateTime();
+        bool saveFramesEnable = false;
+        Mat telloFrame = new Mat("cxOF_image.jpg");
+
+        #region Flight plan
+        public string[] flightPlanFile = File.ReadAllLines(desktop + @"\flightPlan.txt");
+        Queue<Point3D> flightPlan = new Queue<Point3D>();
+        #endregion
+
+        #region Target coordinates
         double X_target;
         double Y_target;
         double Z_target;
         #endregion
 
+        #region Cameras
         VideoCapture capLeft;
         VideoCapture capRight;
         Video_Device[] WebCams;
-        DateTime baseTime = new DateTime();
-        bool saveFramesEnable = false;
-        //String imagesPath = "C:\\Users\\Public\\Pictures_test3\\";
-        Mat cxFrame = new Mat("cxOF_image.jpg");
+        #endregion
+
+        #region Video recorder
+        VideoWriter videoWrite;
+        string videoPath = desktop + @"\drone_recording.mp4";
+        int videoFourcc;
+        int videoWidth;
+        int videoHeight;
+        int videoFps;        
+        #endregion
+
         #region Frame matrices
         //Frame matrices
         Mat frameLeft = new Mat();
@@ -173,7 +193,7 @@ namespace stereoLoadParams
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            calibrationPath.Text = "C:\\Users\\aram8\\Desktop\\calib";
+            calibrationPath.Text = @"C:\Users\aram8\Desktop\calib";
         }
         // This code runs when you press the Start button
         public void StartButton_Click(object sender, EventArgs e)
@@ -183,8 +203,8 @@ namespace stereoLoadParams
             TextWriter oldOut = Console.Out;
             try
             {
-                File.Delete("./EventLog.txt");
-                ostrm = new FileStream("./EventLog.txt", FileMode.OpenOrCreate, FileAccess.Write);
+                File.Delete(desktop + "/EventLog.txt");
+                ostrm = new FileStream(desktop + "/EventLog.txt", FileMode.OpenOrCreate, FileAccess.Write);
                 writer = new StreamWriter(ostrm);
             }
             catch (Exception er)
@@ -199,15 +219,21 @@ namespace stereoLoadParams
             if (capRight == null) capRight = new VideoCapture(Camera_Selection_Right.SelectedIndex);
             if (capLeft.IsOpened && capRight.IsOpened) // check that both cameras working
             {
+                videoFourcc = Convert.ToInt32(capLeft.GetCaptureProperty(CapProp.FourCC));
+                videoWidth  = Convert.ToInt32(2*capLeft.GetCaptureProperty(CapProp.FrameWidth));
+                videoHeight = Convert.ToInt32(2 * capLeft.GetCaptureProperty(CapProp.FrameHeight));
+                videoFps = Convert.ToInt32(capLeft.GetCaptureProperty(CapProp.Fps));
+                videoWrite = new VideoWriter(videoPath, videoFourcc, videoFps, new Size(videoWidth, videoHeight), true);
                 string str1 = "Press ESCAPE key in any image window to close the program.";
                 MessageBox.Show(str1);
             }
             // Calibrate cameras
             Calibration();
+            rmt = new Tello();
             // Obtaining and showing first frame of loaded video(used as the base for difference detection)
             backgroundFrame_l = capLeft.QueryFrame();
             backgroundFrame_r = capRight.QueryFrame();
-            //System.Media.SystemSounds.Beep.Play();
+            
             Mat backgroundLeftRemap = new Mat();
             Mat backgroundRightRemap = new Mat();
 
@@ -220,9 +246,9 @@ namespace stereoLoadParams
             CvInvoke.Imshow(BackgroundFrameWindowName_r, backgroundRightCrop);
 
             // Drone takeoff from the ground            
-            CvInvoke.Imshow("Press Here", cxFrame);
-            rmt.send_command("takeoff");
-            CvInvoke.WaitKey(3000);
+            CvInvoke.Imshow("Press Here", telloFrame);
+            rmt.Takeoff();
+            CvInvoke.WaitKey(5000);
             System.Media.SystemSounds.Exclamation.Play();
 
             //Handling video frames(image processing and contour detection)      
@@ -234,26 +260,33 @@ namespace stereoLoadParams
             // Statistics timers
             var stopwatch = new Stopwatch();// Used to measure video processing performance
             var stopwatch_3d_calculate = new Stopwatch();// Used to measure 3D calculation performance
-
+            
             int frameNumber = 1;
+            Mat videoFrame = new Mat();
 
             #region Flight Plan
             int targetCnt = 1;
             StereoPoint3D drone = new StereoPoint3D();
-            Point3D Point5 = new Point3D(0.2, 0 ,0.7);
-            Point3D Point1 = new Point3D(0.3, 0, 1.1);
-            Point3D Point2 = new Point3D(-0.3, 0, 1.1);
-            Point3D Point3 = new Point3D(-0.2, 0, 0.7);
-            Point3D Point4 = new Point3D(0.2, 0, 0.7);
-            Point3D target = Point1;
+            Point3D target;
+
+            foreach (string line in flightPlanFile)
+            {
+                string[] coordinate = line.Split(',');
+                double x = Convert.ToDouble(coordinate[0]);
+                double y = Convert.ToDouble(coordinate[1]);
+                double z = Convert.ToDouble(coordinate[2]);
+                flightPlan.Enqueue(new Point3D(x, y, z));
+            }
+            target = flightPlan.Dequeue();
             #endregion
+            
             while (true)// Loop video
             {
                 Console.WriteLine("************************************Start Frame*************************************\n");
                 // Getting next frame(null is returned if no further frame exists)
                 rawFrame_l = capture_l.QueryFrame();
                 rawFrame_r = capture_r.QueryFrame();
-
+                
                 // Rectify frames using rmap and crop according to roi (from calibration)
                 CvInvoke.Remap(rawFrame_l, rawFrame_l, rmapx1, rmapy1, Inter.Linear);
                 CvInvoke.Remap(rawFrame_r, rawFrame_r, rmapx2, rmapy2, Inter.Linear);
@@ -265,7 +298,8 @@ namespace stereoLoadParams
                 if (rawFrame_l != null && rawFrame_r != null)
                 {
                     frameNumber++;
-                    
+                    CvInvoke.HConcat(rawFrame_l, rawFrame_r, videoFrame);
+                    videoWrite.Write(videoFrame);
                     // Process frame image to find drone location in the frame
                     stopwatch.Restart();// Frame processing calculate - Start
                     ProcessFrame(backgroundFrame_l, backgroundFrame_r, Threshold, ErodeIterations, DilateIterations);
@@ -276,38 +310,27 @@ namespace stereoLoadParams
                     drone.CalculateCoordinate3D(point_center_l.X, point_center_r.X, point_center_r.Y);
                     X_3d = drone.GetX3D();
                     Y_3d = drone.GetY3D();
-                    Z_3d = drone.GetZ3D();
-                    
+                    Z_3d = drone.GetZ3D();                    
                     stopwatch_3d_calculate.Stop(); // 3D calculate - End
                     Console.WriteLine($"Frame Number: {frameNumber}\n");
-                    // Check drone position accodring to target and update drone command
-                    
+
+                    // Check drone position accodring to target and update drone command                    
                     rmt.InstructionCalculate(drone, ref target);
+
+                    // check and update if needed target coordinate
                     if (target.arrived)
                     {                        
                         System.Media.SystemSounds.Beep.Play();
                         targetCnt++;
-                        switch (targetCnt)
+                        if(flightPlan.Count > 0)
+                            target = flightPlan.Dequeue();
+                        else
                         {
-                            case 2:
-                                target = Point2;
-                                break;
-                            case 3:
-                                target = Point3;
-                                break;
-                            case 4:
-                                target = Point4;
-                                break;
-                            case 5:
-                                target = Point5;
-                                break;
-                            default:
-                                rmt.send_command("land");
-                                CvInvoke.WaitKey(10000);
-                                Environment.Exit(0);
-                                break;
-                        }
-                        
+                            rmt.SendCommand("land");
+                            CvInvoke.WaitKey(10000);
+                            
+                            Environment.Exit(0);
+                        }                        
                     }
                     // Write data to Frame
                     WriteFrameInfo(stopwatch.ElapsedMilliseconds, stopwatch_3d_calculate.ElapsedMilliseconds, frameNumber, targetCnt);
@@ -320,7 +343,8 @@ namespace stereoLoadParams
                     // Close program if Esc key was pressed
                     if (key == 27)
                     {
-                        rmt.send_command("land");
+                        videoWrite.Dispose();
+                        rmt.SendCommand("land");
                         CvInvoke.WaitKey(5000);
                         Environment.Exit(0);
                     }

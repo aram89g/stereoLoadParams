@@ -4,6 +4,7 @@ using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using System;
 // System
+using System.Drawing;
 using System.Windows.Forms;
 using System.Collections.Generic;
 
@@ -13,14 +14,14 @@ namespace stereoLoadParams
     {
         #region Calibration variables
         //Calibration variables
-        static int bufferLength = 38; // define how many good images needed
+        static int bufferLength = 30; // define how many good images needed
         int bufferSavepoint = 0;
         bool patternLeftFound; // True if chessboard found in image
         bool patternRightFound; // True if chessboard found in image
         #endregion
         public void Calibration()
         {
-            String imagesPath = calibrationPath.Text;
+            string imagesPath = calibrationPath.Text;
             if (imageCalibration != true)
             {
                 try
@@ -30,7 +31,10 @@ namespace stereoLoadParams
                     fs["rmapy1"].ReadMat(rmapy1);
                     fs["rmapx2"].ReadMat(rmapx2);
                     fs["rmapy2"].ReadMat(rmapy2);
-
+                    string rec1Str = fs["Rec1"].ReadString();
+                    string rec2Str = fs["Rec2"].ReadString();
+                    Rec1 = new Rectangle();
+                    Rec2 = new Rectangle();
                     MessageBox.Show("Transformation maps loaded successfully");
                 }
                 catch (Exception)
@@ -61,7 +65,12 @@ namespace stereoLoadParams
 
                         CvInvoke.Imshow("Calibration image left", chessFrameL);
                         CvInvoke.Imshow("Calibration image right", chessFrameR);
+                        chessFrameL.Save(desktop + "\\Left_" + i + ".jpg");
+                        chessFrameR.Save(desktop + "\\Right" + i + ".jpg");
+
+
                         CvInvoke.WaitKey(10);
+
                         imagePoints1[bufferSavepoint] = cornersVecLeft.ToArray();
                         imagePoints2[bufferSavepoint] = cornersVecRight.ToArray();
                         bufferSavepoint++;
@@ -95,9 +104,6 @@ namespace stereoLoadParams
                 CvInvoke.StereoRectify(camMat1, dist1, camMat2, dist2, chessFrameL.Size, R, T, R1, R2, P1, P2, Q, StereoRectifyType.CalibZeroDisparity, 0,
                              chessFrameL.Size, ref Rec1, ref Rec2);
 
-                ////This will Show us the usable area from each camera
-                //MessageBox.Show("Left: " + Rec1.ToString() + " \nRight: " + Rec2.ToString());
-
                 // Create transformation maps 
                 CvInvoke.InitUndistortRectifyMap(camMat1, dist1, R1, P1, chessFrameL.Size, DepthType.Cv32F, rmapx1, rmapy1);
                 CvInvoke.InitUndistortRectifyMap(camMat2, dist2, R2, P2, chessFrameL.Size, DepthType.Cv32F, rmapx2, rmapy2);
@@ -109,8 +115,9 @@ namespace stereoLoadParams
                     fs.Write(rmapy1, "rmapy1");
                     fs.Write(rmapx2, "rmapx2");
                     fs.Write(rmapy2, "rmapy2");
-                    MessageBox.Show("Transformation maps saved successfully");
-                    // need to save Rec1, Rec2
+                    fs.Write(Rec1.ToString(), "Rec1");
+                    fs.Write(Rec2.ToString(), "Rec2");
+                    MessageBox.Show("Transformation maps saved successfully");                   
                 }
                 catch (Exception)
                 {
@@ -118,15 +125,6 @@ namespace stereoLoadParams
                     Environment.Exit(1);
                 }
             }
-
-
-            //FileStorage fs = new FileStorage(calibrationPath + "maps.xaml", FileStorage.Mode.Write);
-            //fs["rmpax1"].ReadMat(rmpax1);
-            //fs["rmpay1"].ReadMat(rmpay1);
-            //fs["rmpax2"].ReadMat(rmpax2);
-            //fs["rmpay2"].ReadMat(rmpay2);
-            //MessageBox.Show("Transformation maps loaded successfully");
-
         }
     }
 }
