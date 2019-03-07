@@ -10,14 +10,12 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.Threading;
 using System.Windows.Forms;
 using System.Collections.Generic;
 
 
 namespace stereoLoadParams
 {
-
     public partial class VisionApp : Form
     {
         static bool imageCalibration; // Calibration flag, do new calibration or load pramaters from old one
@@ -27,8 +25,7 @@ namespace stereoLoadParams
         static public string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
         DateTime baseTime = new DateTime();
-        bool saveFramesEnable = false;
-        Mat telloFrame = new Mat("cxOF_image.jpg");
+        Mat telloFrame = new Mat("tello.jpeg");
 
         #region Flight plan
         public string[] flightPlanFile = File.ReadAllLines(desktop + @"\flightPlan.txt");
@@ -219,17 +216,24 @@ namespace stereoLoadParams
             if (capRight == null) capRight = new VideoCapture(Camera_Selection_Right.SelectedIndex);
             if (capLeft.IsOpened && capRight.IsOpened) // check that both cameras working
             {
+                // set video parameters
                 videoFourcc = Convert.ToInt32(capLeft.GetCaptureProperty(CapProp.FourCC));
                 videoWidth  = Convert.ToInt32(2*capLeft.GetCaptureProperty(CapProp.FrameWidth));
                 videoHeight = Convert.ToInt32(2 * capLeft.GetCaptureProperty(CapProp.FrameHeight));
-                videoFps = Convert.ToInt32(capLeft.GetCaptureProperty(CapProp.Fps));
-                videoWrite = new VideoWriter(videoPath, videoFourcc, videoFps, new Size(videoWidth, videoHeight), true);
-                string str1 = "Press ESCAPE key in any image window to close the program.";
-                MessageBox.Show(str1);
+                videoFps = 10;
+                videoWrite = new VideoWriter(videoPath, videoFourcc, videoFps, new Size(videoWidth, videoHeight), true);                
+                MessageBox.Show("Press ESCAPE key to close the program");
             }
+            else
+            {
+                throw new Exception("Error opening a camera");
+            }
+
             // Calibrate cameras
             Calibration();
+
             rmt = new Tello();
+
             // Obtaining and showing first frame of loaded video(used as the base for difference detection)
             backgroundFrame_l = capLeft.QueryFrame();
             backgroundFrame_r = capRight.QueryFrame();
@@ -240,10 +244,14 @@ namespace stereoLoadParams
             // Apply transformation to rectify background images
             CvInvoke.Remap(backgroundFrame_l, backgroundLeftRemap, rmapx1, rmapy1, Inter.Linear);
             CvInvoke.Remap(backgroundFrame_r, backgroundRightRemap, rmapx2, rmapy2, Inter.Linear);
-            Mat backgroundLeftCrop = new Mat(backgroundLeftRemap, Rec1);
-            Mat backgroundRightCrop = new Mat(backgroundRightRemap, Rec2);            
-            CvInvoke.Imshow(BackgroundFrameWindowName_l, backgroundLeftCrop);
-            CvInvoke.Imshow(BackgroundFrameWindowName_r, backgroundRightCrop);
+            //Mat backgroundLeftCrop = new Mat(backgroundLeftRemap, Rec1);
+            //Mat backgroundRightCrop = new Mat(backgroundRightRemap, Rec2);
+
+            Mat backgroundLeftCrop = backgroundLeftRemap.Clone();
+            Mat backgroundRightCrop = backgroundRightRemap.Clone();
+
+            //CvInvoke.Imshow(BackgroundFrameWindowName_l, backgroundLeftCrop);
+            //CvInvoke.Imshow(BackgroundFrameWindowName_r, backgroundRightCrop);
 
             // Drone takeoff from the ground            
             CvInvoke.Imshow("Press Here", telloFrame);
@@ -290,8 +298,10 @@ namespace stereoLoadParams
                 // Rectify frames using rmap and crop according to roi (from calibration)
                 CvInvoke.Remap(rawFrame_l, rawFrame_l, rmapx1, rmapy1, Inter.Linear);
                 CvInvoke.Remap(rawFrame_r, rawFrame_r, rmapx2, rmapy2, Inter.Linear);
-                Mat cropLeft = new Mat(rawFrame_l, Rec1);
-                Mat cropRight = new Mat(rawFrame_r, Rec2);
+                //Mat cropLeft = new Mat(rawFrame_l, Rec1);
+                //Mat cropRight = new Mat(rawFrame_r, Rec2);
+                Mat cropLeft = rawFrame_l.Clone();
+                Mat cropRight = rawFrame_r.Clone();
                 rawFrame_l = cropLeft;
                 rawFrame_r = cropRight;
 
@@ -361,6 +371,7 @@ namespace stereoLoadParams
         }
         private static void ProcessFrame(Mat backgroundFrame_l, Mat backgroundFrame_r, int threshold, int erodeIterations, int dilateIterations)
         {
+            
             ////Find difference between background(first) frame and current frame
             //CvInvoke.AbsDiff(backgroundFrame_l, rawFrame_l, diffFrame_l);
             //CvInvoke.AbsDiff(backgroundFrame_r, rawFrame_r, diffFrame_r);
@@ -400,110 +411,6 @@ namespace stereoLoadParams
 
             left_camera = false;
             DetectObject(binaryDiffFrame_r, finalFrame_r);
-        }
-        private static void ShowWindowsWithImageProcessingStages()        
-        {
-            if (debugMode)
-            {
-                CvInvoke.Imshow(RawFrameWindowName_l, rawFrame_l);
-                CvInvoke.Imshow(RawFrameWindowName_r, rawFrame_r);
-                CvInvoke.Imshow(GrayscaleDiffFrameWindowName, grayscaleDiffFrame_l);
-                CvInvoke.Imshow(BinaryDiffFrameWindowName, binaryDiffFrame_l);
-                CvInvoke.Imshow(DenoisedDiffFrameWindowName, denoisedDiffFrame_l);
-            }
-            CvInvoke.Imshow(FinalFrameWindowName_l, finalFrame_l);
-            CvInvoke.Imshow(FinalFrameWindowName_r, finalFrame_r);
-        }
-        private static void WriteMultilineText(Mat frame, string[] lines, Point origin)
-        {
-            for (int i = 0; i < lines.Length; i++)
-            {
-                int y = i * 10 + origin.Y;// Moving down on each line
-                CvInvoke.PutText(frame, lines[i], new Point(origin.X, y), FontFace.HersheyPlain, 0.8, drawingColor);
-            }
-        }
-        private static void DetectObject(Mat detectionFrame, Mat displayFrame)
-        {
-            using (VectorOfVectorOfPoint contours = new VectorOfVectorOfPoint())
-            {
-                //Build list of contours
-                CvInvoke.FindContours(detectionFrame, contours, null, RetrType.List, ChainApproxMethod.ChainApproxSimple);
-
-                //Selecting largest contour
-                if (contours.Size > 0)
-                {
-                    double maxArea = 0;
-                    int chosen = 0;
-                    for (int i = 0; i < contours.Size; i++)
-                    {
-                        VectorOfPoint contour = contours[i];
-
-                        double area = CvInvoke.ContourArea(contour);
-                        if (area > maxArea)
-                        {
-                            maxArea = area;
-                            chosen = i;
-                        }
-                    }
-                    //Draw on a frame
-                    MarkDetectedObject(displayFrame, contours[chosen], maxArea);
-                }
-            }
-        }
-        private static void MarkDetectedObject(Mat frame, VectorOfPoint contour, double area)
-        {
-           //Getting minimal rectangle which contains the contour
-           Rectangle box = CvInvoke.BoundingRectangle(contour);
-
-            //Drawing contour and box around it
-            CvInvoke.Polylines(frame, contour, true, drawingColor);
-            CvInvoke.Rectangle(frame, box, drawingColor);
-
-           //Write information next to marked object
-           Point center = new Point(box.X + box.Width / 2, box.Y + box.Height / 2);
-            if (left_camera == true)
-            {
-                point_center_l = center;
-            }
-            else
-            {
-                point_center_r = center;
-            }
-
-            var info = new string[] {
-                $"Area: {area}",
-                $"Position: {center.X}, {center.Y}",
-            };
-
-            WriteMultilineText(frame, info, new Point(box.Right + 5, center.Y));
-        }
-        private static void WriteFrameInfo(long elapsedMs, long _3d_elapsedMs, int frameNumber, int targetCnt )
-        {
-            var info = new string[] {
-                $"Frame Number: {frameNumber}",
-                $"Processing Time (Find the drone in each image): {elapsedMs} [ms]",
-                $"3d Processing Time : {_3d_elapsedMs} ms",
-                $"Left Camera - Position: {point_center_l.X}, {point_center_l.Y}",
-                $"Right Camera - Position: {point_center_r.X}, {point_center_r.Y}",
-                $"X_3d : {X_3d} [meter]",
-                $"Y_3d : {Y_3d} [meter]",
-                $"Z_3d : {Z_3d} [meter]",
-                $"Destination: target {targetCnt}"
-        };
-
-            // Save frames to PC
-            bool saveFramesEnable = false;
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            Directory.CreateDirectory(desktop + "\\savedFrames");
-            finalFrame_l.Save(desktop + "\\savedFrames\\Left_" + frameNumber + ".jpg");
-            finalFrame_r.Save(desktop + "\\savedFrames\\Right_" + frameNumber + ".jpg");
-            WriteMultilineText(finalFrame_l, info, new Point(5, 10));
-            WriteMultilineText(finalFrame_r, info, new Point(5, 10));
-            if (saveFramesEnable == true)
-            {
-                finalFrame_l.Save(desktop + "\\savedFrames\\" + frameNumber + "Left_withData.jpg");
-                finalFrame_r.Save(desktop + "\\savedFrames\\" + frameNumber + "Right_withData.jpg");
-            }
         }
 
         private void newCalib_CheckedChanged(object sender, EventArgs e)

@@ -75,6 +75,9 @@
     <Compile Include="Calibration.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="HelperFunctions.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="commandDelays.cs" />
     <Compile Include="cxOF.cs" />
     <Compile Include="stereoPoint3D.cs" />
@@ -116,7 +119,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="cxOF_image.jpg">
+    <Content Include="tello.jpeg">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

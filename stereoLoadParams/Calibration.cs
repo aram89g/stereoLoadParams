@@ -14,7 +14,7 @@ namespace stereoLoadParams
     {
         #region Calibration variables
         //Calibration variables
-        static int bufferLength = 30; // define how many good images needed
+        static int bufferLength = 10; // define how many good images needed
         int bufferSavepoint = 0;
         bool patternLeftFound; // True if chessboard found in image
         bool patternRightFound; // True if chessboard found in image
@@ -31,10 +31,40 @@ namespace stereoLoadParams
                     fs["rmapy1"].ReadMat(rmapy1);
                     fs["rmapx2"].ReadMat(rmapx2);
                     fs["rmapy2"].ReadMat(rmapy2);
+
                     string rec1Str = fs["Rec1"].ReadString();
                     string rec2Str = fs["Rec2"].ReadString();
-                    Rec1 = new Rectangle();
-                    Rec2 = new Rectangle();
+
+                    int idx1 = rec1Str.IndexOf('=');
+                    int idx2 = rec1Str.IndexOf(',');
+                    int x = Convert.ToInt32(rec1Str.Substring(idx1 + 1, idx2 - idx1 - 1));
+                    idx1 = rec1Str.IndexOf('=',idx2);
+                    idx2 = rec1Str.IndexOf(',',idx1);
+                    int y = Convert.ToInt32(rec1Str.Substring(idx1 + 1, idx2 - idx1 - 1));
+                    idx1 = rec1Str.IndexOf('=', idx2);
+                    idx2 = rec1Str.IndexOf(',', idx1);
+                    int w = Convert.ToInt32(rec1Str.Substring(idx1 + 1, idx2 - idx1 - 1));
+                    idx1 = rec1Str.IndexOf('=', idx2);
+                    idx2 = rec1Str.Length;
+                    int h = Convert.ToInt32(rec1Str.Substring(idx1 + 1, idx2 - idx1 - 1));
+
+                    Rec1 = new Rectangle(x,y,w,h);
+
+                    idx1 = rec2Str.IndexOf('=');
+                    idx2 = rec2Str.IndexOf(',');
+                    x = Convert.ToInt32(rec2Str.Substring(idx1 + 1, idx2 - idx1 - 1));
+                    idx1 = rec2Str.IndexOf('=', idx2);
+                    idx2 = rec2Str.IndexOf(',', idx1);
+                    y = Convert.ToInt32(rec2Str.Substring(idx1 + 1, idx2 - idx1 - 1));
+                    idx1 = rec2Str.IndexOf('=', idx2);
+                    idx2 = rec2Str.IndexOf(',', idx1);
+                    w = Convert.ToInt32(rec2Str.Substring(idx1 + 1, idx2 - idx1 - 1));
+                    idx1 = rec2Str.IndexOf('=', idx2);
+                    idx2 = rec2Str.Length;
+                    h = Convert.ToInt32(rec2Str.Substring(idx1 + 1, idx2 - idx1 - 1));
+
+                    Rec2 = new Rectangle(x,y,w,h);
+
                     MessageBox.Show("Transformation maps loaded successfully");
                 }
                 catch (Exception)
@@ -65,9 +95,8 @@ namespace stereoLoadParams
 
                         CvInvoke.Imshow("Calibration image left", chessFrameL);
                         CvInvoke.Imshow("Calibration image right", chessFrameR);
-                        chessFrameL.Save(desktop + "\\Left_" + i + ".jpg");
-                        chessFrameR.Save(desktop + "\\Right" + i + ".jpg");
-
+                        //chessFrameL.Save(desktop + "\\Left_" + i + ".jpg");
+                        //chessFrameR.Save(desktop + "\\Right" + i + ".jpg");
 
                         CvInvoke.WaitKey(10);
 
@@ -107,7 +136,7 @@ namespace stereoLoadParams
                 // Create transformation maps 
                 CvInvoke.InitUndistortRectifyMap(camMat1, dist1, R1, P1, chessFrameL.Size, DepthType.Cv32F, rmapx1, rmapy1);
                 CvInvoke.InitUndistortRectifyMap(camMat2, dist2, R2, P2, chessFrameL.Size, DepthType.Cv32F, rmapx2, rmapy2);
-                MessageBox.Show("Calibration has ended");
+                MessageBox.Show("Calibration has ended\n Connect to TELLO access point");
                 try
                 {
                     FileStorage fs = new FileStorage(calibrationPath.Text + "\\calibMaps.xml", FileStorage.Mode.Write);
@@ -127,4 +156,5 @@ namespace stereoLoadParams
             }
         }
     }
+    
 }
