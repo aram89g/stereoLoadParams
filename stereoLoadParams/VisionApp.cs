@@ -316,12 +316,10 @@ namespace stereoLoadParams
                     stopwatch.Stop();// Frame processing calculate - End
 
                     // Calculate drone 3D coordinate
-                    stopwatch_3d_calculate.Restart(); // 3D calculate - Start
                     drone.CalculateCoordinate3D(point_center_l.X, point_center_r.X, point_center_r.Y);
                     X_3d = drone.GetX3D();
                     Y_3d = drone.GetY3D();
                     Z_3d = drone.GetZ3D();                    
-                    stopwatch_3d_calculate.Stop(); // 3D calculate - End
                     Console.WriteLine($"Frame Number: {frameNumber}\n");
 
                     // Check drone position accodring to target and update drone command                    
@@ -343,7 +341,7 @@ namespace stereoLoadParams
                         }                        
                     }
                     // Write data to Frame
-                    WriteFrameInfo(stopwatch.ElapsedMilliseconds, stopwatch_3d_calculate.ElapsedMilliseconds, frameNumber, targetCnt);
+                    WriteFrameInfo(stopwatch.ElapsedMilliseconds, frameNumber, targetCnt);
 
                     // Show all frame processing stages
                     ShowWindowsWithImageProcessingStages();

@@ -124,12 +124,11 @@ namespace stereoLoadParams
 
             WriteMultilineText(frame, info, new Point(box.Right + 5, center.Y));
         }
-        private static void WriteFrameInfo(long elapsedMs, long _3d_elapsedMs, int frameNumber, int targetCnt)
+        private static void WriteFrameInfo(long elapsedMs, int frameNumber, int targetCnt)
         {
             var info = new string[] {
                 $"Frame Number: {frameNumber}",
                 $"Processing Time (Find the drone in each image): {elapsedMs} [ms]",
-                $"3d Processing Time : {_3d_elapsedMs} ms",
                 $"Left Camera - Position: {point_center_l.X}, {point_center_l.Y}",
                 $"Right Camera - Position: {point_center_r.X}, {point_center_r.Y}",
                 $"X_3d : {X_3d} [m]",
