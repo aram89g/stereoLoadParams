@@ -1,18 +1,61 @@
 ﻿// EMGU
 using Emgu.CV;
 using Emgu.CV.CvEnum;
+using Emgu.CV.Structure;
 using Emgu.CV.Util;
 // System
 using System;
 using System.Drawing;
 using System.IO;
 
-
-
 namespace stereoLoadParams
 {
     public partial class VisionApp
     {
+        private static void ProcessFrame(int threshold)
+        {
+            CvInvoke.CvtColor(rawFrame_l, grayscaleDiffFrame_l, ColorConversion.Bgr2Gray);
+            CvInvoke.CvtColor(rawFrame_r, grayscaleDiffFrame_r, ColorConversion.Bgr2Gray);
+            CvInvoke.Threshold(grayscaleDiffFrame_l, binaryDiffFrame_l, threshold, 255, ThresholdType.Binary);
+            CvInvoke.Threshold(grayscaleDiffFrame_r, binaryDiffFrame_r, threshold, 255, ThresholdType.Binary);
+
+            rawFrame_l.CopyTo(finalFrame_l);
+            rawFrame_r.CopyTo(finalFrame_r);
+
+            left_camera = true;
+            DetectObject(binaryDiffFrame_l, finalFrame_l);
+
+            left_camera = false;
+            DetectObject(binaryDiffFrame_r, finalFrame_r);
+        }
+        private static void ProcessFrame(Mat backgroundFrame_l, Mat backgroundFrame_r, int threshold, int erodeIterations, int dilateIterations)
+        {
+
+            //Find difference between background(first) frame and current frame
+            CvInvoke.AbsDiff(backgroundFrame_l, rawFrame_l, diffFrame_l);
+            CvInvoke.AbsDiff(backgroundFrame_r, rawFrame_r, diffFrame_r);
+
+            //Apply binary threshold to grayscale image(white pixel will mark difference)
+            CvInvoke.CvtColor(diffFrame_l, grayscaleDiffFrame_l, ColorConversion.Bgr2Gray);
+            CvInvoke.CvtColor(diffFrame_r, grayscaleDiffFrame_r, ColorConversion.Bgr2Gray);
+            CvInvoke.Threshold(grayscaleDiffFrame_l, binaryDiffFrame_l, threshold, 255, ThresholdType.Binary);
+            CvInvoke.Threshold(grayscaleDiffFrame_r, binaryDiffFrame_r, threshold, 255, ThresholdType.Binary);
+
+            //Remove noise with opening operation(erosion followed by dilation)
+            CvInvoke.Erode(binaryDiffFrame_l, denoisedDiffFrame_l, null, new Point(-1, -1), erodeIterations, BorderType.Default, new MCvScalar(1));
+            CvInvoke.Erode(binaryDiffFrame_r, denoisedDiffFrame_r, null, new Point(-1, -1), erodeIterations, BorderType.Default, new MCvScalar(1));
+            CvInvoke.Dilate(denoisedDiffFrame_l, denoisedDiffFrame_l, null, new Point(-1, -1), dilateIterations, BorderType.Default, new MCvScalar(1));
+            CvInvoke.Dilate(denoisedDiffFrame_r, denoisedDiffFrame_r, null, new Point(-1, -1), dilateIterations, BorderType.Default, new MCvScalar(1));
+
+            rawFrame_l.CopyTo(finalFrame_l);
+            rawFrame_r.CopyTo(finalFrame_r);
+
+            left_camera = true;
+            DetectObject(denoisedDiffFrame_l, finalFrame_l);
+
+            left_camera = false;
+            DetectObject(denoisedDiffFrame_r, finalFrame_r);
+        }        
         private static void ShowWindowsWithImageProcessingStages()
         {
             if (debugMode)
@@ -25,14 +68,6 @@ namespace stereoLoadParams
             }
             CvInvoke.Imshow(FinalFrameWindowName_l, finalFrame_l);
             CvInvoke.Imshow(FinalFrameWindowName_r, finalFrame_r);
-        }
-        private static void WriteMultilineText(Mat frame, string[] lines, Point origin)
-        {
-            for (int i = 0; i < lines.Length; i++)
-            {
-                int y = i * 10 + origin.Y;// Moving down on each line
-                CvInvoke.PutText(frame, lines[i], new Point(origin.X, y), FontFace.HersheyPlain, 0.8, drawingColor);
-            }
         }
         private static void DetectObject(Mat detectionFrame, Mat displayFrame)
         {
@@ -97,9 +132,9 @@ namespace stereoLoadParams
                 $"3d Processing Time : {_3d_elapsedMs} ms",
                 $"Left Camera - Position: {point_center_l.X}, {point_center_l.Y}",
                 $"Right Camera - Position: {point_center_r.X}, {point_center_r.Y}",
-                $"X_3d : {X_3d} [meter]",
-                $"Y_3d : {Y_3d} [meter]",
-                $"Z_3d : {Z_3d} [meter]",
+                $"X_3d : {X_3d} [m]",
+                $"Y_3d : {Y_3d} [m]",
+                $"Z_3d : {Z_3d} [m]",
                 $"Destination: target {targetCnt}"
         };
 
@@ -115,6 +150,14 @@ namespace stereoLoadParams
             {
                 finalFrame_l.Save(desktop + "\\savedFrames\\" + frameNumber + "Left_withData.jpg");
                 finalFrame_r.Save(desktop + "\\savedFrames\\" + frameNumber + "Right_withData.jpg");
+            }
+        }
+        private static void WriteMultilineText(Mat frame, string[] lines, Point origin)
+        {
+            for (int i = 0; i < lines.Length; i++)
+            {
+                int y = i * 10 + origin.Y;// Moving down on each line
+                CvInvoke.PutText(frame, lines[i], new Point(origin.X, y), FontFace.HersheyPlain, 0.8, drawingColor);
             }
         }
     }

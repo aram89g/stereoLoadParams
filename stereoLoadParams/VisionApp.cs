@@ -217,10 +217,10 @@ namespace stereoLoadParams
             if (capLeft.IsOpened && capRight.IsOpened) // check that both cameras working
             {
                 // set video parameters
-                videoFourcc = Convert.ToInt32(capLeft.GetCaptureProperty(CapProp.FourCC));
-                videoWidth  = Convert.ToInt32(2*capLeft.GetCaptureProperty(CapProp.FrameWidth));
-                videoHeight = Convert.ToInt32(2 * capLeft.GetCaptureProperty(CapProp.FrameHeight));
-                videoFps = 10;
+                videoFourcc = (int)capLeft.GetCaptureProperty(CapProp.FourCC);
+                videoWidth  = 2*(int)capLeft.GetCaptureProperty(CapProp.FrameWidth);
+                videoHeight = 2 * (int)capLeft.GetCaptureProperty(CapProp.FrameHeight);
+                videoFps = (int)capLeft.GetCaptureProperty(CapProp.Fps);
                 videoWrite = new VideoWriter(videoPath, videoFourcc, videoFps, new Size(videoWidth, videoHeight), true);                
                 MessageBox.Show("Press ESCAPE key to close the program");
             }
@@ -306,7 +306,7 @@ namespace stereoLoadParams
                 rawFrame_r = cropRight;
 
                 if (rawFrame_l != null && rawFrame_r != null)
-                {
+                {                    
                     frameNumber++;
                     CvInvoke.HConcat(rawFrame_l, rawFrame_r, videoFrame);
                     videoWrite.Write(videoFrame);
@@ -369,50 +369,6 @@ namespace stereoLoadParams
                 }
             }
         }
-        private static void ProcessFrame(Mat backgroundFrame_l, Mat backgroundFrame_r, int threshold, int erodeIterations, int dilateIterations)
-        {
-            
-            ////Find difference between background(first) frame and current frame
-            //CvInvoke.AbsDiff(backgroundFrame_l, rawFrame_l, diffFrame_l);
-            //CvInvoke.AbsDiff(backgroundFrame_r, rawFrame_r, diffFrame_r);
-
-            ////Apply binary threshold to grayscale image(white pixel will mark difference)
-            //CvInvoke.CvtColor(diffFrame_l, grayscaleDiffFrame_l, ColorConversion.Bgr2Gray);
-            //CvInvoke.CvtColor(diffFrame_r, grayscaleDiffFrame_r, ColorConversion.Bgr2Gray);
-            //CvInvoke.Threshold(grayscaleDiffFrame_l, binaryDiffFrame_l, threshold, 255, ThresholdType.Binary);
-            //CvInvoke.Threshold(grayscaleDiffFrame_r, binaryDiffFrame_r, threshold, 255, ThresholdType.Binary);
-
-            ////Remove noise with opening operation(erosion followed by dilation)
-            //CvInvoke.Erode(binaryDiffFrame_l, denoisedDiffFrame_l, null, new Point(-1, -1), erodeIterations, BorderType.Default, new MCvScalar(1));
-            //CvInvoke.Erode(binaryDiffFrame_r, denoisedDiffFrame_r, null, new Point(-1, -1), erodeIterations, BorderType.Default, new MCvScalar(1));
-            //CvInvoke.Dilate(denoisedDiffFrame_l, denoisedDiffFrame_l, null, new Point(-1, -1), dilateIterations, BorderType.Default, new MCvScalar(1));
-            //CvInvoke.Dilate(denoisedDiffFrame_r, denoisedDiffFrame_r, null, new Point(-1, -1), dilateIterations, BorderType.Default, new MCvScalar(1));
-
-            //rawFrame_l.CopyTo(finalFrame_l);
-            //rawFrame_r.CopyTo(finalFrame_r);
-
-            //left_camera = true;
-            //DetectObject(denoisedDiffFrame_l, finalFrame_l);
-
-            //left_camera = false;
-            //DetectObject(denoisedDiffFrame_r, finalFrame_r);
-
-            //Apply binary threshold to grayscale image(white pixel will mark difference)
-            CvInvoke.CvtColor(rawFrame_l, grayscaleDiffFrame_l, ColorConversion.Bgr2Gray);
-            CvInvoke.CvtColor(rawFrame_r, grayscaleDiffFrame_r, ColorConversion.Bgr2Gray);
-            CvInvoke.Threshold(grayscaleDiffFrame_l, binaryDiffFrame_l, threshold, 255, ThresholdType.Binary);
-            CvInvoke.Threshold(grayscaleDiffFrame_r, binaryDiffFrame_r, threshold, 255, ThresholdType.Binary);
-
-            rawFrame_l.CopyTo(finalFrame_l);
-            rawFrame_r.CopyTo(finalFrame_r);
-
-            left_camera = true;
-            DetectObject(binaryDiffFrame_l, finalFrame_l);
-
-            left_camera = false;
-            DetectObject(binaryDiffFrame_r, finalFrame_r);
-        }
-
         private void newCalib_CheckedChanged(object sender, EventArgs e)
         {
             if (newCalib.Checked)
