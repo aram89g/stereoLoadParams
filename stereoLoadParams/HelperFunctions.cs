@@ -12,6 +12,9 @@ namespace stereoLoadParams
 {
     public partial class VisionApp
     {
+        /**********************************************************
+        * Frame processing using only threshold operation
+        **********************************************************/
         private static void ProcessFrame(int threshold)
         {
             CvInvoke.CvtColor(rawFrame_l, grayscaleDiffFrame_l, ColorConversion.Bgr2Gray);
@@ -28,6 +31,11 @@ namespace stereoLoadParams
             left_camera = false;
             DetectObject(binaryDiffFrame_r, finalFrame_r);
         }
+
+        /**********************************************************
+        * Frame processing using background subtraction and 
+        * morphological operations, (sensitive to light)
+        **********************************************************/
         private static void ProcessFrame(Mat backgroundFrame_l, Mat backgroundFrame_r, int threshold, int erodeIterations, int dilateIterations)
         {
 
@@ -55,7 +63,11 @@ namespace stereoLoadParams
 
             left_camera = false;
             DetectObject(denoisedDiffFrame_r, finalFrame_r);
-        }        
+        }
+
+        /**********************************************************
+        * Show processing stages of frame.
+        **********************************************************/
         private static void ShowWindowsWithImageProcessingStages()
         {
             if (debugMode)
@@ -69,6 +81,10 @@ namespace stereoLoadParams
             CvInvoke.Imshow(FinalFrameWindowName_l, finalFrame_l);
             CvInvoke.Imshow(FinalFrameWindowName_r, finalFrame_r);
         }
+
+        /**********************************************************
+        * Detect object by finding largest blob
+        **********************************************************/
         private static void DetectObject(Mat detectionFrame, Mat displayFrame)
         {
             using (VectorOfVectorOfPoint contours = new VectorOfVectorOfPoint())
@@ -97,6 +113,10 @@ namespace stereoLoadParams
                 }
             }
         }
+
+        /**********************************************************
+        * Mark the detected object by drawing a line around it's contour.
+        **********************************************************/
         private static void MarkDetectedObject(Mat frame, VectorOfPoint contour, double area)
         {
             //Getting minimal rectangle which contains the contour
@@ -124,6 +144,10 @@ namespace stereoLoadParams
 
             WriteMultilineText(frame, info, new Point(box.Right + 5, center.Y));
         }
+
+        /**********************************************************
+        * Write data on the frame, location, processing time, target
+        **********************************************************/
         private static void WriteFrameInfo(long elapsedMs, int frameNumber, int targetCnt)
         {
             var info = new string[] {
@@ -151,6 +175,10 @@ namespace stereoLoadParams
                 finalFrame_r.Save(desktop + "\\savedFrames\\" + frameNumber + "Right_withData.jpg");
             }
         }
+
+        /**********************************************************
+        * Write multiple lines on frame.
+        **********************************************************/
         private static void WriteMultilineText(Mat frame, string[] lines, Point origin)
         {
             for (int i = 0; i < lines.Length; i++)

@@ -4,9 +4,9 @@
 
 public class Point3D
 {
-    private double X_target;
-    private double Y_target;
-    private double Z_target;
+    private readonly double X_target;
+    private readonly double Y_target;
+    private readonly double Z_target;
     public bool arrived;
 
     public Point3D(double x, double y, double z)
@@ -35,9 +35,5 @@ public class Point3D
     public double GetZ()
     {
         return Z_target;
-    }
-    public void SetZ(double z)
-    {
-        Z_target = z;
     }
 }

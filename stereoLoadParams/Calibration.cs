@@ -19,6 +19,10 @@ namespace stereoLoadParams
         bool patternLeftFound; // True if chessboard found in image
         bool patternRightFound; // True if chessboard found in image
         #endregion
+
+        /**********************************************************
+        * Calculates calibration transformatons and saves them.
+        **********************************************************/
         public void Calibration()
         {
             string imagesPath = calibrationPath.Text;

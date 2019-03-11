@@ -1,4 +1,10 @@
-﻿// DiresctShow
+﻿/* --------------------------------------------------------------------------------------------------------------
+ * Description: This is the main app for the autonomus control of the TELLO drone.
+ * Created by:  Aram Gasparian & Rahamim Workenech.
+ * Date:        Feb 2019.
+ --------------------------------------------------------------------------------------------------------------*/
+
+// DiresctShow
 using DirectShowLib;
 // EMGU
 using Emgu.CV;
@@ -32,12 +38,6 @@ namespace stereoLoadParams
         Queue<Point3D> flightPlan = new Queue<Point3D>();
         #endregion
 
-        #region Target coordinates
-        double X_target;
-        double Y_target;
-        double Z_target;
-        #endregion
-
         #region Cameras
         VideoCapture capLeft;
         VideoCapture capRight;
@@ -50,7 +50,7 @@ namespace stereoLoadParams
         int videoFourcc;
         int videoWidth;
         int videoHeight;
-        int videoFps;        
+        int videoFps;
         #endregion
 
         #region Frame matrices
@@ -122,12 +122,11 @@ namespace stereoLoadParams
         #region Image Processing Variables
         //Determines boundary of brightness while turning grayscale image to binary(black-white) image
         private const int Threshold = 200;
-
         //Erosion to remove noise(reduce white pixel zones)
         private const int ErodeIterations = 3;
-
         //Dilation to enhance erosion survivors(enlarge white pixel zones)
         private const int DilateIterations = 3;
+
         //Window names used in CvInvoke.Imshow calls
         private const string BackgroundFrameWindowName_l = "Left Camera - Background Frame";
         private const string BackgroundFrameWindowName_r = "Right Camera - Background Frame";
@@ -164,12 +163,17 @@ namespace stereoLoadParams
         private static double Z_3d = 0.0;
         #endregion
 
+        /**********************************************************
+        * load default values to UI
+        **********************************************************/
         public VisionApp()
         {
             InitializeComponent();
             label1.Text = "Created by:\nAram Gasparian\nRahamim Workenech";
-            
+            calibrationPath.Text = @"C:\Users\aram8\Desktop\calib";
+
             baseTime = DateTime.Now;
+
             #region Find systems cameras with DirectShow.Net dll
             // Find systems cameras with DirectShow.Net dll
             DsDevice[] _SystemCamereas = DsDevice.GetDevicesOfCat(FilterCategory.VideoInputDevice);
@@ -183,18 +187,27 @@ namespace stereoLoadParams
             if (Camera_Selection_Left.Items.Count > 0)
             {
                 Camera_Selection_Left.SelectedIndex = 0; //Set the selected device the default
-                Camera_Selection_Right.SelectedIndex = 1; //Set the selected device the default
+                Camera_Selection_Right.SelectedIndex = 0; //Set the selected device the default
             }
             #endregion
         }
 
+        /**********************************************************
+        * must have method
+        **********************************************************/
         private void Form1_Load(object sender, EventArgs e)
         {
-            calibrationPath.Text = @"C:\Users\aram8\Desktop\calib";
         }
-        // This code runs when you press the Start button
+
+        /**********************************************************
+        * redirect output to file for logging
+        * take scene background images for image subtraction algorithm
+        * drone takeoff
+        * main vido processing loop
+        **********************************************************/
         public void StartButton_Click(object sender, EventArgs e)
         {
+            // Change output to a file
             FileStream ostrm;
             StreamWriter writer;
             TextWriter oldOut = Console.Out;
@@ -218,10 +231,10 @@ namespace stereoLoadParams
             {
                 // set video parameters
                 videoFourcc = (int)capLeft.GetCaptureProperty(CapProp.FourCC);
-                videoWidth  = 2*(int)capLeft.GetCaptureProperty(CapProp.FrameWidth);
+                videoWidth = 2 * (int)capLeft.GetCaptureProperty(CapProp.FrameWidth);
                 videoHeight = 2 * (int)capLeft.GetCaptureProperty(CapProp.FrameHeight);
-                videoFps = (int)capLeft.GetCaptureProperty(CapProp.Fps);
-                videoWrite = new VideoWriter(videoPath, videoFourcc, videoFps, new Size(videoWidth, videoHeight), true);                
+                videoFps = 25;
+                videoWrite = new VideoWriter(videoPath, videoFourcc, videoFps, new Size(videoWidth, videoHeight), true);
                 MessageBox.Show("Press ESCAPE key to close the program");
             }
             else
@@ -237,18 +250,18 @@ namespace stereoLoadParams
             // Obtaining and showing first frame of loaded video(used as the base for difference detection)
             backgroundFrame_l = capLeft.QueryFrame();
             backgroundFrame_r = capRight.QueryFrame();
-            
+
             Mat backgroundLeftRemap = new Mat();
             Mat backgroundRightRemap = new Mat();
 
             // Apply transformation to rectify background images
             CvInvoke.Remap(backgroundFrame_l, backgroundLeftRemap, rmapx1, rmapy1, Inter.Linear);
             CvInvoke.Remap(backgroundFrame_r, backgroundRightRemap, rmapx2, rmapy2, Inter.Linear);
-            //Mat backgroundLeftCrop = new Mat(backgroundLeftRemap, Rec1);
-            //Mat backgroundRightCrop = new Mat(backgroundRightRemap, Rec2);
+            Mat backgroundLeftCrop = new Mat(backgroundLeftRemap, Rec1);
+            Mat backgroundRightCrop = new Mat(backgroundRightRemap, Rec2);
 
-            Mat backgroundLeftCrop = backgroundLeftRemap.Clone();
-            Mat backgroundRightCrop = backgroundRightRemap.Clone();
+            //Mat backgroundLeftCrop = backgroundLeftRemap.Clone();
+            //Mat backgroundRightCrop = backgroundRightRemap.Clone();
 
             //CvInvoke.Imshow(BackgroundFrameWindowName_l, backgroundLeftCrop);
             //CvInvoke.Imshow(BackgroundFrameWindowName_r, backgroundRightCrop);
@@ -260,18 +273,27 @@ namespace stereoLoadParams
             System.Media.SystemSounds.Exclamation.Play();
 
             //Handling video frames(image processing and contour detection)      
-            VideoProcessingLoop(capLeft, backgroundLeftCrop, capRight, backgroundRightCrop, rmapx1, rmapy1, rmapx2, rmapy2, Rec1, Rec2);        
+            VideoProcessingLoop(capLeft, backgroundLeftCrop, capRight, backgroundRightCrop, rmapx1, rmapy1, rmapx2, rmapy2, Rec1, Rec2);
         }
 
+        /**********************************************************
+        * processing of the images taken from the cameras after remapping them,
+        * in order to find the drone and send a command to it.
+        * Update of the flight plan.
+        * Show processed frames in windows.
+        * Create video from cameras images.
+        **********************************************************/
         public void VideoProcessingLoop(VideoCapture capture_l, Mat backgroundFrame_l, VideoCapture capture_r, Mat backgroundFrame_r, Mat rmapx1, Mat rmapy1, Mat rmapx2, Mat rmapy2, Rectangle Rec1, Rectangle Rec2)
         {
             // Statistics timers
             var stopwatch = new Stopwatch();// Used to measure video processing performance
             var stopwatch_3d_calculate = new Stopwatch();// Used to measure 3D calculation performance
-            
-            int frameNumber = 1;
+
+            int frameNumber = 0;
             Mat videoFrame = new Mat();
 
+            Mat cropLeft;
+            Mat cropRight;
             #region Flight Plan
             int targetCnt = 1;
             StereoPoint3D drone = new StereoPoint3D();
@@ -287,86 +309,86 @@ namespace stereoLoadParams
             }
             target = flightPlan.Dequeue();
             #endregion
-            
+
             while (true)// Loop video
             {
+                frameNumber++;
                 Console.WriteLine("************************************Start Frame*************************************\n");
+
                 // Getting next frame(null is returned if no further frame exists)
                 rawFrame_l = capture_l.QueryFrame();
                 rawFrame_r = capture_r.QueryFrame();
-                
+
                 // Rectify frames using rmap and crop according to roi (from calibration)
                 CvInvoke.Remap(rawFrame_l, rawFrame_l, rmapx1, rmapy1, Inter.Linear);
                 CvInvoke.Remap(rawFrame_r, rawFrame_r, rmapx2, rmapy2, Inter.Linear);
-                //Mat cropLeft = new Mat(rawFrame_l, Rec1);
-                //Mat cropRight = new Mat(rawFrame_r, Rec2);
-                Mat cropLeft = rawFrame_l.Clone();
-                Mat cropRight = rawFrame_r.Clone();
+
+                // Save video file of both cameras stream (images needs to be the same size)
+                CvInvoke.HConcat(rawFrame_l, rawFrame_r, videoFrame);
+                videoWrite.Write(videoFrame);
+
+                // Crop images according to ROI
+                cropLeft = new Mat(rawFrame_l, Rec1);
+                cropRight = new Mat(rawFrame_r, Rec2);
+                //cropLeft = rawFrame_l.Clone();
+                //cropRight = rawFrame_r.Clone();
                 rawFrame_l = cropLeft;
                 rawFrame_r = cropRight;
 
-                if (rawFrame_l != null && rawFrame_r != null)
-                {                    
-                    frameNumber++;
-                    CvInvoke.HConcat(rawFrame_l, rawFrame_r, videoFrame);
-                    videoWrite.Write(videoFrame);
-                    // Process frame image to find drone location in the frame
-                    stopwatch.Restart();// Frame processing calculate - Start
-                    ProcessFrame(backgroundFrame_l, backgroundFrame_r, Threshold, ErodeIterations, DilateIterations);
-                    stopwatch.Stop();// Frame processing calculate - End
+                // Process frame image to find drone location in the frame
+                stopwatch.Restart();// Frame processing calculate - Start
+                ProcessFrame(backgroundFrame_l, backgroundFrame_r, Threshold, ErodeIterations, DilateIterations);
+                stopwatch.Stop();// Frame processing calculate - End
 
-                    // Calculate drone 3D coordinate
-                    drone.CalculateCoordinate3D(point_center_l.X, point_center_r.X, point_center_r.Y);
-                    X_3d = drone.GetX3D();
-                    Y_3d = drone.GetY3D();
-                    Z_3d = drone.GetZ3D();                    
-                    Console.WriteLine($"Frame Number: {frameNumber}\n");
+                // Calculate drone 3D coordinate
+                drone.CalculateCoordinate3D(point_center_l.X, point_center_r.X, point_center_r.Y);
+                X_3d = drone.GetX3D();
+                Y_3d = drone.GetY3D();
+                Z_3d = drone.GetZ3D();
+                Console.WriteLine($"Frame Number: {frameNumber}\n");
 
-                    // Check drone position accodring to target and update drone command                    
-                    rmt.InstructionCalculate(drone, ref target);
+                // Check drone position accodring to target and update drone command                    
+                rmt.InstructionCalculate(drone, ref target);
 
-                    // check and update if needed target coordinate
-                    if (target.arrived)
-                    {                        
-                        System.Media.SystemSounds.Beep.Play();
-                        targetCnt++;
-                        if(flightPlan.Count > 0)
-                            target = flightPlan.Dequeue();
-                        else
-                        {
-                            rmt.SendCommand("land");
-                            CvInvoke.WaitKey(10000);
-                            
-                            Environment.Exit(0);
-                        }                        
-                    }
-                    // Write data to Frame
-                    WriteFrameInfo(stopwatch.ElapsedMilliseconds, frameNumber, targetCnt);
-
-                    // Show all frame processing stages
-                    ShowWindowsWithImageProcessingStages();
-
-                    // Enable program exit from keyboard
-                    int key = CvInvoke.WaitKey(5);
-                    // Close program if Esc key was pressed
-                    if (key == 27)
+                // check and update if needed target coordinate
+                if (target.arrived)
+                {
+                    System.Media.SystemSounds.Beep.Play();
+                    targetCnt++;
+                    if (flightPlan.Count > 0)
+                        target = flightPlan.Dequeue();
+                    else
                     {
-                        videoWrite.Dispose();
                         rmt.SendCommand("land");
-                        CvInvoke.WaitKey(5000);
+                        CvInvoke.WaitKey(10000);
                         Environment.Exit(0);
                     }
-                    Console.WriteLine("************************************End Frame*************************************\n\n");
                 }
-                else
-                {
-                    // Move to first frame
-                    capture_l.SetCaptureProperty(CapProp.PosFrames, 0);
-                    capture_r.SetCaptureProperty(CapProp.PosFrames, 0);
-                    frameNumber = 0;
+                // Write data to Frame
+                WriteFrameInfo(stopwatch.ElapsedMilliseconds, frameNumber, targetCnt);
+
+                // Show all frame processing stages
+                ShowWindowsWithImageProcessingStages();
+
+                // Enable program exit from keyboard
+                int key = CvInvoke.WaitKey(5);
+                // Close program if Esc key was pressed
+                if (key == 27)
+                {                    
+                    rmt.SendCommand("land");
+                    CvInvoke.WaitKey(5000);
+                    videoWrite.Dispose();
+                    Environment.Exit(0);
                 }
+                Console.WriteLine("************************************End Frame*************************************\n\n");
+
             }
         }
+
+        /**********************************************************
+        * Enable checkbox for new calibration and disable for 
+        * load calibration
+        **********************************************************/
         private void newCalib_CheckedChanged(object sender, EventArgs e)
         {
             if (newCalib.Checked)
@@ -379,6 +401,10 @@ namespace stereoLoadParams
                 loadCalib.Enabled = true;
             }
         }
+        /**********************************************************
+        * Enable checkbox for load calibration and disable for 
+        * new calibration
+        **********************************************************/
         private void loadCalib_CheckedChanged(object sender, EventArgs e)
         {
             if (loadCalib.Checked)
@@ -391,17 +417,16 @@ namespace stereoLoadParams
                 newCalib.Enabled = true;
             }
         }
+
+        /**********************************************************
+        * browse for calibration images folder and calibration maps
+        **********************************************************/
         private void browseBtn_Click(object sender, EventArgs e)
         {
             if (folderBrowserDialog1.ShowDialog() == DialogResult.OK && (loadCalib.Checked || newCalib.Checked))
             {
                 calibrationPath.Text = folderBrowserDialog1.SelectedPath;
             }
-
-            //if (openFileDialog1.ShowDialog() == DialogResult.OK && (loadCalib.Checked || newCalib.Checked))
-            //{
-            //    calibrationPath.Text = openFileDialog1.;
-            //}
         }
     }
 }

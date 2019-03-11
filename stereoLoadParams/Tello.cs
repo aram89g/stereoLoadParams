@@ -1,4 +1,4 @@
-﻿/* 
+﻿/* --------------------------------------------------------------------------------------------------------------
  * Description: This is a tello remote control that is used to communicate with the tello drone over UDP.
  *              It has control variables that can be used to send the drone RC commands in all channels, 
  *              and it can send all the commands from the Tello SDK 1.3.
@@ -8,7 +8,7 @@
  *              It throws a TimeoutException if the drone hasn't responded to a sent command.
  * Created by:  Aram Gasparian.
  * Date:        Feb 2019.
- */
+ --------------------------------------------------------------------------------------------------------------*/
 
 using System;
 using System.IO;
@@ -17,7 +17,6 @@ using System.Threading;
 using System.Net;
 using System.Net.Sockets;
 using Emgu.CV;
-using System.Collections.Generic;
 using PIDControllers;
 
 public class Tello
@@ -37,7 +36,6 @@ public class Tello
     Socket socket;
 
     // Video thread
-    Socket video_socket;
     Mat frame = new Mat();
     bool is_new_frame_to_process;
     VideoCapture cap;
@@ -59,46 +57,48 @@ public class Tello
     StreamWriter stateFile = new StreamWriter(desktop + @"\state.txt");
     StreamWriter responseFile = new StreamWriter(desktop + @"\response.txt");
 
-    byte[] response;
     bool respFlag;
     bool abortFlag;
 
+    // PID's
     PIDController pidX = new PIDController();
     PIDController pidY = new PIDController();
     PIDController pidZ = new PIDController();
-
-    //static double Min = -30;
-    //static double Max = 30;
     
+    // PID output limitations
     static double min = -0.20; // [m\sec] maximum speed for pid output
     static double max = 0.20; // [m\sec] minimum speed for pid output
 
+    // PID outputs
     double stateX;
     double stateY;
     double stateZ;
 
+    // Error tolerance
     double delta = 0.1;
 
+    // Kp,Kd,Ki variables
     double Tix = 100;
     double Tdx = 0.5;
     double Kpx = (1.0 / 7) * 3;
-    double Kix = 0;
-    double Kdx = 0;
+    double Kix;
+    double Kdx;
 
     double Tiy = 100;
     double Tdy = 0.5;
     double Kpy = (1.0 / 7) * 3;
-    double Kiy = 0;
-    double Kdy = 0;
+    double Kiy;
+    double Kdy;
 
     double Tiz = 100;
     double Tdz = 0.05;
     double Kpz = (1.0 / 7) * 3;
-    double Kiz = 0;
-    double Kdz = 0;
+    double Kiz;
+    double Kdz;
+
     /**********************************************************
      * send a command to the drone and busy wait for it's response,
-     * throws TimeoutException if timeout passsed
+     * throws TimeoutException if timeout passsed.
      **********************************************************/
     public void SendCommand(string command)
     {
@@ -118,6 +118,9 @@ public class Tello
         //respFlag = false;
     }
 
+    /**********************************************************
+     * initialize PID parameters.
+     **********************************************************/
     public void InitializePIDs()
     {
         // initialize PID constants
@@ -159,6 +162,10 @@ public class Tello
         pidZ.Tolerance = delta * 100 / (pidZ.MaxInput - pidZ.MinInput);
     }
 
+    /**********************************************************
+     * TELLO constructor, creates sockects and threads.
+     * enables drone SDK mode.
+     **********************************************************/
     public Tello()
     {
         InitializePIDs();
@@ -200,7 +207,7 @@ public class Tello
 
     /**********************************************************
      * drone video stream thread, takes frame from stream and if 
-     * there is a valid frame raises flag "is_new_frame_to_process"
+     * there is a valid frame raises flag "is_new_frame_to_process".
      **********************************************************/
     public void VideoReceiveProc()
     {
@@ -213,14 +220,18 @@ public class Tello
             }
         }
     }
+
     /**********************************************************
-     * return true if there is a new frame to process
+     * return true if there is a new frame to process.
      **********************************************************/
     public bool IsNewFrameReady()
     {
         return is_new_frame_to_process;
     }
 
+    /**********************************************************
+     * Returns the last frame recieved from drone.
+     **********************************************************/
     public Mat GetLastFrame()
     {
         is_new_frame_to_process = false;
@@ -248,7 +259,7 @@ public class Tello
     /**********************************************************
      * recieve responses to sent commands, when a response is 
      * recieved raises flag to alert that the resonse has 
-     * recieved and writes it to a file 
+     * recieved and writes it to a file.
      **********************************************************/
     public void ResponseProc()
     {
@@ -327,9 +338,9 @@ public class Tello
     public void InstructionCalculate(StereoPoint3D drone, ref Point3D target)
     {
         double delta = 0.1;
-        int stepX = 20;
-        int stepY = 20;
-        int stepZ = 20;
+        //int stepX = 20;
+        //int stepY = 20;
+        //int stepZ = 20;
 
         double X = drone.GetX3D();
         double Y = drone.GetY3D();
@@ -342,6 +353,7 @@ public class Tello
         Console.WriteLine($"Drone Coordinates:  [X: {drone.GetX3D()}, Y: {drone.GetY3D()}, Z: {drone.GetZ3D()}]\n");
         Console.WriteLine($"Target Coordinates:  [X: {target.GetX()}, Y: {target.GetY()}, Z: {target.GetZ()}]\n");
         
+        // set PID input and reference
         pidX.Input = drone.GetX3D();
         pidX.Setpoint = target.GetX();
 
@@ -350,14 +362,17 @@ public class Tello
 
         pidZ.Input = drone.GetZ3D();
         pidZ.Setpoint = target.GetZ();
+
         Console.WriteLine($"PID X:  [Kp: {pidX.Kp}, Ki: {pidX.Ki}, Kd: {pidX.Kd}]\n");
         Console.WriteLine($"PID Y:  [Kp: {pidY.Kp}, Ki: {pidY.Ki}, Kd: {pidY.Kd}]\n");
         Console.WriteLine($"PID Z:  [Kp: {pidZ.Kp}, Ki: {pidZ.Ki}, Kd: {pidZ.Kd}]\n");
 
-        xValid = OnTarget(pidX.Setpoint, pidX.Input, delta);
+        // check if drone is at target
+        xValid  = OnTarget(pidX.Setpoint, pidX.Input, delta);
         yValid = OnTarget(pidY.Setpoint, pidY.Input, delta);
         zValid = OnTarget(pidZ.Setpoint, pidZ.Input, delta);
 
+        // calculate PID output
         stateX = pidX.PerformPID();
         stateY = pidY.PerformPID();
         stateZ = pidZ.PerformPID();
